@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # GasGen Telegram Bot (connects to existing PostgreSQL)
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: gasgen_bot
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      KIE_API_KEY: ${KIE_API_KEY:-}
+      IMGBB_API_KEY: ${IMGBB_API_KEY:-}
+      # Connect to host PostgreSQL
+      DB_HOST: 172.17.0.1  # Docker bridge gateway
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-gasgen}
+      DB_USER: ${DB_USER:-gasgen_user}
+      DB_PASSWORD: ${DB_PASSWORD:-gasgen_secure_pass}
+      CHROMA_DIR: /app/data/chroma_db
+      DATA_DIR: /app/data/higgsfield_data
+    network_mode: bridge
+    volumes:
+      - bot_data:/app/data
+      - ./bot:/app/bot:ro
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  bot_data:
+    driver: local

@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info
+dist
+build
+.venv
+venv
+env
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data directories (these will be mounted as volumes or migrated separately)
+higgsfield_data
+higgsfield_data_v2
+higgsfield_data_v3
+chroma_db
+
+# Deployment
+.env
+*.log
+*.pid
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+
+# Documentation
+*.md
+docs/
+DEPLOYMENT.md
+
+# Scripts
+deploy.sh
+migrate_to_db.py
+*.pyc
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Archives
+*.tar.gz
+*.zip
+*.rar

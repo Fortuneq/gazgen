@@ -1,0 +1,24 @@
+# Core dependencies
+requests==2.32.5
+openai>=1.0.0
+
+# Telegram bot
+aiogram>=3.4.0
+
+# Database
+psycopg2-binary==2.9.9
+chromadb==0.4.22
+
+# ML/AI
+torch>=2.2.0
+transformers>=4.36.0
+sentence-transformers==2.3.1
+
+# Image processing
+Pillow==10.2.0
+
+# Environment
+python-dotenv==1.0.0
+
+# Optional (for parsing)
+playwright==1.58.0
