@@ -1,8 +1,10 @@
 """
 /start handler — приветствие и главное меню
 """
+import os
+
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, WebAppInfo
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -13,6 +15,12 @@ router = Router()
 
 def build_categories_keyboard():
     builder = InlineKeyboardBuilder()
+    miniapp_url = os.getenv("MINIAPP_URL")
+    if miniapp_url:
+        builder.button(
+            text="\U0001f5bc \u041e\u0442\u043a\u0440\u044b\u0442\u044c \u0433\u0430\u043b\u0435\u0440\u0435\u044e",
+            web_app=WebAppInfo(url=miniapp_url),
+        )
     stats = get_categories_stats()
     categories = get_all_categories()
     for cat in categories:

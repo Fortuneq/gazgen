@@ -10,6 +10,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import MenuButtonWebApp, WebAppInfo
 
 from bot.handlers import start, categories, search, image_gen, generate_like
 
@@ -41,6 +42,17 @@ async def main():
         token=bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+
+    # Set MiniApp menu button if URL is configured
+    miniapp_url = os.getenv("MINIAPP_URL")
+    if miniapp_url:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="\U0001f5bc Gallery",
+                web_app=WebAppInfo(url=miniapp_url),
+            )
+        )
+        logger.info("MiniApp menu button set: %s", miniapp_url)
 
     dp = Dispatcher(storage=MemoryStorage())
 
