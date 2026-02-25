@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile.webapp
+    container_name: gasgen_webapp
+    environment:
+      DB_HOST: 172.17.0.1
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-gasgen}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      KIE_API_KEY: ${KIE_API_KEY:-}
+      IMGBB_API_KEY: ${IMGBB_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    restart: unless-stopped
+    networks:
+      - miniapp_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:alpine
+    container_name: gasgen_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - webapp
+    restart: unless-stopped
+    networks:
+      - miniapp_network
+
+networks:
+  miniapp_network:
+    driver: bridge

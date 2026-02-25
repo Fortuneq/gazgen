@@ -1,0 +1,65 @@
+from pydantic import BaseModel
+from typing import Optional
+
+
+class CategoryOut(BaseModel):
+    name: str
+    emoji: str
+    post_count: int
+
+
+class PostOut(BaseModel):
+    id: int
+    publication_id: str
+    prompt: Optional[str] = None
+    category: str
+    category_emoji: str
+    created_at: str
+    has_result_image: bool
+    reference_count: int
+
+
+class PostDetailOut(PostOut):
+    references: list["ImageMeta"]
+
+
+class ImageMeta(BaseModel):
+    order: int
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
+class PaginatedPosts(BaseModel):
+    items: list[PostOut]
+    total: int
+    page: int
+    limit: int
+    has_more: bool
+
+
+class SearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+
+class SearchResultOut(PostOut):
+    similarity: float
+
+
+class GenerateRequest(BaseModel):
+    post_id: int
+    prompt_mode: str = "original"
+    custom_prompt: Optional[str] = None
+    aspect_ratio: str = "1:1"
+    use_references: bool = True
+
+
+class GenerateResponse(BaseModel):
+    task_id: str
+
+
+class GenerateStatusOut(BaseModel):
+    task_id: str
+    status: str
+    result_url: Optional[str] = None
+    error: Optional[str] = None
