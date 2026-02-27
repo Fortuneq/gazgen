@@ -24,9 +24,11 @@
   50% { opacity: 0.5; }
 }
 
-@keyframes gradientRotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+@keyframes progressGrow {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  90% { width: 90%; }
+  100% { width: 95%; }
 }
 
 .animate-in {
@@ -44,7 +46,7 @@
 .stagger-8 { animation-delay: 0.4s; }
 
 .skeleton {
-  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background: linear-gradient(90deg, #18181B 25%, #27272A 50%, #18181B 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 8px;

@@ -1,91 +1,62 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import type { PostDetail, GenerateRequest } from '../types'
-import { getPost, getImageUrl, getReferenceUrl, startGeneration, getGenerationStatus } from '../api'
+import type { PostDetail, GenerateRequest, ModelTier } from '../types'
+import { getPost, getImageUrl, startGeneration, getGenerationStatus } from '../api'
+import { MODEL_DATA } from '../api'
 import { tg, haptic, hapticSuccess, hapticError } from '../telegram'
+import { useIsDesktop } from '../hooks/useMediaQuery'
+import { Sparkles, Download, RotateCcw } from 'lucide-react'
 
-type Step = 'prompt' | 'references' | 'ratio' | 'generating' | 'result'
 type PromptMode = 'original' | 'custom' | 'adapted'
+type PageState = 'form' | 'generating' | 'result'
 
-const ASPECT_RATIOS = [
-  { label: '1:1', value: '1:1', icon: '[ ]' },
-  { label: '16:9', value: '16:9', icon: '[ - ]' },
-  { label: '9:16', value: '9:16', icon: '[|]' },
-  { label: '4:3', value: '4:3', icon: '[-]' },
-  { label: '3:4', value: '3:4', icon: '[:]' },
+const ACCENT = '#C4F82A'
+const SURFACE = '#18181B'
+const BORDER = '#27272A'
+const BG = '#0A0A0A'
+const TEXT = '#FFFFFF'
+const TEXT_SEC = '#A1A1AA'
+const TEXT_TER = '#52525B'
+
+const ASPECT_RATIOS: { label: string; value: string; w: number; h: number }[] = [
+  { label: '1:1', value: '1:1', w: 1, h: 1 },
+  { label: '16:9', value: '16:9', w: 16, h: 9 },
+  { label: '9:16', value: '9:16', w: 9, h: 16 },
 ]
 
 export default function GeneratePage() {
   const { postId } = useParams<{ postId: string }>()
   const navigate = useNavigate()
-  const [post, setPost] = useState<PostDetail | null>(null)
-  const [loading, setLoading] = useState(true)
+  const isDesktop = useIsDesktop()
 
-  const [step, setStep] = useState<Step>('prompt')
+  const [post, setPost] = useState<PostDetail | null>(null)
+  const [loadingPost, setLoadingPost] = useState(false)
+
+  const [pageState, setPageState] = useState<PageState>('form')
   const [promptMode, setPromptMode] = useState<PromptMode>('original')
   const [customPrompt, setCustomPrompt] = useState('')
   const [useReferences, setUseReferences] = useState(true)
   const [aspectRatio, setAspectRatio] = useState('1:1')
+  const [selectedModel, setSelectedModel] = useState<ModelTier>('standard')
   const [taskId, setTaskId] = useState<string | null>(null)
   const [resultUrl, setResultUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [textareaFocused, setTextareaFocused] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const hasValidPostId = !!postId && postId !== '0'
+
   useEffect(() => {
-    if (!postId || postId === '0') {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
+    if (!hasValidPostId) return
+    setLoadingPost(true)
     getPost(Number(postId))
       .then((p) => {
         setPost(p)
         setCustomPrompt(p.prompt || '')
       })
       .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [postId])
-
-  const goBack = useCallback(() => {
-    switch (step) {
-      case 'prompt':
-        navigate(-1)
-        break
-      case 'references':
-        haptic('light')
-        setStep('prompt')
-        break
-      case 'ratio':
-        haptic('light')
-        if (post && post.reference_count > 0) {
-          setStep('references')
-        } else {
-          setStep('prompt')
-        }
-        break
-      case 'generating':
-        break
-      case 'result':
-        navigate('/')
-        break
-    }
-  }, [step, navigate, post])
-
-  useEffect(() => {
-    if (tg) {
-      if (step === 'generating') {
-        tg.BackButton.hide()
-      } else {
-        tg.BackButton.show()
-        tg.BackButton.onClick(goBack)
-      }
-    }
-    return () => {
-      if (tg) {
-        tg.BackButton.offClick(goBack)
-      }
-    }
-  }, [goBack, step])
+      .finally(() => setLoadingPost(false))
+  }, [postId, hasValidPostId])
 
   useEffect(() => {
     return () => {
@@ -93,31 +64,38 @@ export default function GeneratePage() {
     }
   }, [])
 
-  const handleNextFromPrompt = () => {
-    haptic('medium')
-    if (post && post.reference_count > 0) {
-      setStep('references')
+  const goBack = useCallback(() => {
+    if (pageState === 'result') {
+      navigate('/')
     } else {
-      setStep('ratio')
+      navigate(-1)
     }
-  }
+  }, [pageState, navigate])
 
-  const handleNextFromReferences = () => {
-    haptic('medium')
-    setStep('ratio')
-  }
+  useEffect(() => {
+    if (!tg) return
+    if (pageState === 'generating') {
+      tg.BackButton.hide()
+    } else {
+      tg.BackButton.show()
+      tg.BackButton.onClick(goBack)
+    }
+    return () => {
+      if (tg) tg.BackButton.offClick(goBack)
+    }
+  }, [goBack, pageState])
 
   const handleGenerate = async () => {
-    if (!post) return
     haptic('heavy')
-    setStep('generating')
+    setPageState('generating')
     setError(null)
 
     const req: GenerateRequest = {
-      post_id: post.id,
+      post_id: post ? post.id : 0,
       prompt_mode: promptMode,
       aspect_ratio: aspectRatio,
       use_references: useReferences,
+      model: selectedModel,
     }
     if (promptMode === 'custom' || promptMode === 'adapted') {
       req.custom_prompt = customPrompt
@@ -133,613 +111,933 @@ export default function GeneratePage() {
           if (status.status === 'success' && status.result_url) {
             if (pollRef.current) clearInterval(pollRef.current)
             setResultUrl(status.result_url)
-            setStep('result')
+            setPageState('result')
             hapticSuccess()
           } else if (status.status === 'failed') {
             if (pollRef.current) clearInterval(pollRef.current)
-            setError(status.error || 'Generation failed')
-            setStep('prompt')
+            setError(status.error || 'Ошибка генерации')
+            setPageState('form')
             hapticError()
           }
         } catch {
           if (pollRef.current) clearInterval(pollRef.current)
-          setError('Lost connection')
-          setStep('prompt')
+          setError('Потеряно соединение')
+          setPageState('form')
           hapticError()
         }
       }, 3000)
     } catch {
-      setError('Failed to start generation')
-      setStep('prompt')
+      setError('Не удалось запустить генерацию')
+      setPageState('form')
       hapticError()
     }
   }
 
-  if (loading) {
+  const handleReset = () => {
+    haptic('medium')
+    setPageState('form')
+    setResultUrl(null)
+    setTaskId(null)
+    setError(null)
+  }
+
+  const isGenerateDisabled =
+    (promptMode === 'custom' || promptMode === 'adapted') && !customPrompt.trim()
+
+  if (pageState === 'generating') {
+    return <GeneratingOverlay taskId={taskId} />
+  }
+
+  if (pageState === 'result' && resultUrl) {
     return (
-      <div style={styles.page}>
-        <div style={styles.center}>
-          <div className="skeleton" style={{ width: 200, height: 200, borderRadius: 16 }} />
-        </div>
-      </div>
+      <ResultView
+        resultUrl={resultUrl}
+        promptMode={promptMode}
+        customPrompt={customPrompt}
+        onReset={handleReset}
+      />
     )
   }
 
-  if (!post && postId !== '0') {
+  if (isDesktop) {
     return (
-      <div style={styles.page}>
-        <div style={styles.center}>
-          <p style={styles.emptyText}>Post not found</p>
+      <div style={s.desktopRoot}>
+        <div style={s.desktopLeft}>
+          <FormContent
+            post={post}
+            loadingPost={loadingPost}
+            promptMode={promptMode}
+            setPromptMode={setPromptMode}
+            customPrompt={customPrompt}
+            setCustomPrompt={setCustomPrompt}
+            useReferences={useReferences}
+            setUseReferences={setUseReferences}
+            aspectRatio={aspectRatio}
+            setAspectRatio={setAspectRatio}
+            selectedModel={selectedModel}
+            setSelectedModel={setSelectedModel}
+            textareaFocused={textareaFocused}
+            setTextareaFocused={setTextareaFocused}
+            error={error}
+            isGenerateDisabled={isGenerateDisabled}
+            onGenerate={handleGenerate}
+          />
+        </div>
+        <div style={s.desktopRight}>
+          <DesktopPreview post={post} loadingPost={loadingPost} />
         </div>
       </div>
     )
   }
 
   return (
-    <div style={styles.page} className="safe-bottom">
-      <div style={styles.header}>
-        <h1 style={styles.title}>
-          <span className="gradient-text">Generate</span>
-        </h1>
-        <StepIndicator current={step} />
+    <div style={s.mobileRoot} className="safe-bottom">
+      <FormContent
+        post={post}
+        loadingPost={loadingPost}
+        promptMode={promptMode}
+        setPromptMode={setPromptMode}
+        customPrompt={customPrompt}
+        setCustomPrompt={setCustomPrompt}
+        useReferences={useReferences}
+        setUseReferences={setUseReferences}
+        aspectRatio={aspectRatio}
+        setAspectRatio={setAspectRatio}
+        selectedModel={selectedModel}
+        setSelectedModel={setSelectedModel}
+        textareaFocused={textareaFocused}
+        setTextareaFocused={setTextareaFocused}
+        error={error}
+        isGenerateDisabled={isGenerateDisabled}
+        onGenerate={handleGenerate}
+      />
+    </div>
+  )
+}
+
+// ---- Sub-components ----
+
+interface FormContentProps {
+  post: PostDetail | null
+  loadingPost: boolean
+  promptMode: PromptMode
+  setPromptMode: (m: PromptMode) => void
+  customPrompt: string
+  setCustomPrompt: (v: string) => void
+  useReferences: boolean
+  setUseReferences: (v: boolean) => void
+  aspectRatio: string
+  setAspectRatio: (v: string) => void
+  selectedModel: ModelTier
+  setSelectedModel: (m: ModelTier) => void
+  textareaFocused: boolean
+  setTextareaFocused: (v: boolean) => void
+  error: string | null
+  isGenerateDisabled: boolean
+  onGenerate: () => void
+}
+
+function FormContent({
+  post,
+  loadingPost,
+  promptMode,
+  setPromptMode,
+  customPrompt,
+  setCustomPrompt,
+  useReferences,
+  setUseReferences,
+  aspectRatio,
+  setAspectRatio,
+  selectedModel,
+  setSelectedModel,
+  textareaFocused,
+  setTextareaFocused,
+  error,
+  isGenerateDisabled,
+  onGenerate,
+}: FormContentProps) {
+  return (
+    <div style={s.formScroll}>
+      {/* Header */}
+      <div style={s.header}>
+        <h1 style={s.title}>Создать</h1>
       </div>
 
+      {/* Error */}
       {error && (
-        <div className="animate-in" style={styles.errorBanner}>
-          {error}
-        </div>
+        <div style={s.errorBanner}>{error}</div>
       )}
 
-      {step === 'prompt' && (
-        <div className="animate-in" style={styles.stepContent}>
-          {post && (
-            <div style={styles.previewRow}>
-              <img src={getImageUrl(post.id)} alt="" style={styles.previewThumb} />
-              <div>
-                <p style={styles.previewLabel}>Based on</p>
-                <p style={styles.previewCategory}>{post.category_emoji} {post.category}</p>
-              </div>
+      {/* Post preview */}
+      {loadingPost && (
+        <div style={s.section}>
+          <div style={{ ...s.postCard, justifyContent: 'center', minHeight: 64 }}>
+            <div className="skeleton" style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="skeleton" style={{ width: 60, height: 12, borderRadius: 4 }} />
+              <div className="skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} />
             </div>
-          )}
-
-          <p style={styles.sectionLabel}>Prompt Mode</p>
-          <div style={styles.optionGroup}>
-            <OptionButton
-              active={promptMode === 'original'}
-              onClick={() => { haptic(); setPromptMode('original') }}
-              label="Use Original"
-              description="Keep the exact prompt from this post"
-            />
-            <OptionButton
-              active={promptMode === 'custom'}
-              onClick={() => { haptic(); setPromptMode('custom') }}
-              label="Modify Prompt"
-              description="Edit the prompt yourself"
-            />
-            <OptionButton
-              active={promptMode === 'adapted'}
-              onClick={() => { haptic(); setPromptMode('adapted') }}
-              label="Adapt with AI"
-              description="Describe your idea, AI will adapt"
-            />
           </div>
-
-          {(promptMode === 'custom' || promptMode === 'adapted') && (
-            <div className="animate-in" style={styles.textareaWrap}>
-              <textarea
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder={promptMode === 'custom'
-                  ? 'Edit the prompt...'
-                  : 'Describe your idea...'}
-                style={styles.textarea}
-                rows={4}
-              />
-            </div>
-          )}
-
-          <button
-            className="accent-btn"
-            style={styles.nextBtn}
-            onClick={handleNextFromPrompt}
-            disabled={
-              (promptMode === 'custom' || promptMode === 'adapted') && !customPrompt.trim()
-            }
-          >
-            Continue
-          </button>
         </div>
       )}
 
-      {step === 'references' && post && (
-        <div className="animate-in" style={styles.stepContent}>
-          <p style={styles.sectionLabel}>Reference Images</p>
-          <div style={styles.refPreview} className="hide-scrollbar">
-            {post.references.map((ref) => (
-              <img
-                key={ref.order}
-                src={getReferenceUrl(post.id, ref.order)}
-                alt={`Reference ${ref.order}`}
-                style={styles.refImg}
-              />
-            ))}
-          </div>
-
-          <div style={styles.optionGroup}>
-            <OptionButton
-              active={useReferences}
-              onClick={() => { haptic(); setUseReferences(true) }}
-              label="Use Original References"
-              description="Include reference images in generation"
-            />
-            <OptionButton
-              active={!useReferences}
-              onClick={() => { haptic(); setUseReferences(false) }}
-              label="No References"
-              description="Generate using only the prompt"
-            />
-          </div>
-
-          <button
-            className="accent-btn"
-            style={styles.nextBtn}
-            onClick={handleNextFromReferences}
-          >
-            Continue
-          </button>
-        </div>
-      )}
-
-      {step === 'ratio' && (
-        <div className="animate-in" style={styles.stepContent}>
-          <p style={styles.sectionLabel}>Aspect Ratio</p>
-          <div style={styles.ratioGrid}>
-            {ASPECT_RATIOS.map((r) => (
-              <button
-                key={r.value}
-                style={{
-                  ...styles.ratioBtn,
-                  ...(aspectRatio === r.value ? styles.ratioBtnActive : {}),
-                }}
-                onClick={() => { haptic(); setAspectRatio(r.value) }}
-              >
-                <span style={styles.ratioIcon}>{r.icon}</span>
-                <span style={styles.ratioLabel}>{r.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <button
-            className="accent-btn"
-            style={styles.nextBtn}
-            onClick={handleGenerate}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3z" />
-            </svg>
-            Generate
-          </button>
-        </div>
-      )}
-
-      {step === 'generating' && (
-        <div className="animate-in" style={styles.generatingWrap}>
-          <div style={styles.spinner}>
-            <svg width="80" height="80" viewBox="0 0 80 80">
-              <defs>
-                <linearGradient id="spinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#A855F7" />
-                  <stop offset="100%" stopColor="#EC4899" />
-                </linearGradient>
-              </defs>
-              <circle
-                cx="40"
-                cy="40"
-                r="34"
-                fill="none"
-                stroke="rgba(255,255,255,0.06)"
-                strokeWidth="4"
-              />
-              <circle
-                cx="40"
-                cy="40"
-                r="34"
-                fill="none"
-                stroke="url(#spinGrad)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray="80 134"
-                style={{ animation: 'spin 1.2s linear infinite', transformOrigin: '40px 40px' }}
-              />
-            </svg>
-          </div>
-          <p style={styles.generatingText}>Generating your image...</p>
-          <p style={styles.generatingHint}>This usually takes 15-30 seconds</p>
-          {taskId && (
-            <p style={styles.taskId}>Task: {taskId.slice(0, 8)}...</p>
-          )}
-        </div>
-      )}
-
-      {step === 'result' && resultUrl && (
-        <div className="animate-in" style={styles.stepContent}>
-          <div style={styles.resultImageWrap}>
+      {!loadingPost && post && (
+        <div style={s.section}>
+          <div style={s.postCard}>
             <img
-              src={resultUrl}
-              alt="Generated result"
-              style={styles.resultImage}
+              src={getImageUrl(post.id)}
+              alt=""
+              style={s.postThumb}
             />
+            <div>
+              <p style={s.postCardLabel}>На основе поста</p>
+              <p style={s.postCardCategory}>{post.category_emoji} {post.category}</p>
+            </div>
           </div>
-          <div style={styles.resultActions}>
-            <a
-              href={resultUrl}
-              download
-              className="accent-btn"
-              style={styles.downloadBtn}
-              onClick={() => hapticSuccess()}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Download
-            </a>
+        </div>
+      )}
+
+      {/* Prompt mode tabs */}
+      <div style={s.section}>
+        <p style={s.sectionLabel}>Режим промпта</p>
+        <div style={s.tabRow}>
+          {(['original', 'custom', 'adapted'] as PromptMode[]).map((mode) => {
+            const labels: Record<PromptMode, string> = {
+              original: 'Оригинал',
+              custom: 'Свой',
+              adapted: 'Адаптация',
+            }
+            const isActive = promptMode === mode
+            return (
+              <button
+                key={mode}
+                style={{
+                  ...s.tab,
+                  ...(isActive ? s.tabActive : s.tabInactive),
+                }}
+                onClick={() => { haptic('light'); setPromptMode(mode) }}
+              >
+                {labels[mode]}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Textarea */}
+      {(promptMode === 'custom' || promptMode === 'adapted') && (
+        <div style={s.section}>
+          <textarea
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder={promptMode === 'custom' ? 'Введите свой промпт...' : 'Опишите вашу идею...'}
+            rows={4}
+            style={{
+              ...s.textarea,
+              ...(textareaFocused ? s.textareaFocused : {}),
+            }}
+            onFocus={() => setTextareaFocused(true)}
+            onBlur={() => setTextareaFocused(false)}
+          />
+        </div>
+      )}
+
+      {/* References toggle */}
+      {post && post.reference_count > 0 && (
+        <div style={s.section}>
+          <p style={s.sectionLabel}>Референсы</p>
+          <div style={s.refToggleRow}>
             <button
-              style={styles.newGenBtn}
-              onClick={() => {
-                haptic('medium')
-                setStep('prompt')
-                setResultUrl(null)
-                setTaskId(null)
-                setError(null)
+              style={{
+                ...s.refToggleBtn,
+                ...(useReferences ? s.refToggleBtnActive : {}),
               }}
+              onClick={() => { haptic('light'); setUseReferences(true) }}
             >
-              Generate Another
+              Использовать
+            </button>
+            <button
+              style={{
+                ...s.refToggleBtn,
+                ...(!useReferences ? s.refToggleBtnActive : {}),
+              }}
+              onClick={() => { haptic('light'); setUseReferences(false) }}
+            >
+              Без референсов
             </button>
           </div>
         </div>
       )}
+
+      {/* Aspect ratio */}
+      <div style={s.section}>
+        <p style={s.sectionLabel}>Соотношение сторон</p>
+        <div style={s.ratioRow}>
+          {ASPECT_RATIOS.map((r) => {
+            const isActive = aspectRatio === r.value
+            return (
+              <button
+                key={r.value}
+                style={{
+                  ...s.ratioBtn,
+                  ...(isActive ? s.ratioBtnActive : {}),
+                }}
+                onClick={() => { haptic('light'); setAspectRatio(r.value) }}
+              >
+                <RatioIcon w={r.w} h={r.h} active={isActive} />
+                <span style={{ ...s.ratioLabel, ...(isActive ? { color: ACCENT } : {}) }}>
+                  {r.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Model selector */}
+      <div style={s.section}>
+        <p style={s.sectionLabel}>Модель</p>
+        <div style={s.modelGrid}>
+          {MODEL_DATA.map((m) => {
+            const isActive = selectedModel === m.id
+            return (
+              <button
+                key={m.id}
+                style={{
+                  ...s.modelCard,
+                  ...(isActive ? s.modelCardActive : {}),
+                }}
+                onClick={() => { haptic('light'); setSelectedModel(m.id) }}
+              >
+                <p style={{ ...s.modelName, ...(isActive ? { color: ACCENT } : {}) }}>
+                  {m.name}
+                </p>
+                <p style={s.modelDesc}>{m.description}</p>
+                <p style={{ ...s.modelCost, ...(isActive ? { color: ACCENT } : {}) }}>
+                  {m.creditsPerPhoto} кр/фото
+                </p>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Generate CTA */}
+      <div style={s.ctaSection}>
+        <button
+          style={{
+            ...s.generateBtn,
+            ...(isGenerateDisabled ? s.generateBtnDisabled : {}),
+          }}
+          onClick={onGenerate}
+          disabled={isGenerateDisabled}
+        >
+          <Sparkles size={18} color={isGenerateDisabled ? TEXT_TER : '#0A0A0A'} />
+          Создать
+        </button>
+      </div>
     </div>
   )
 }
 
-function OptionButton({ active, onClick, label, description }: {
-  active: boolean
-  onClick: () => void
-  label: string
-  description: string
+function RatioIcon({ w, h, active }: { w: number; h: number; active: boolean }) {
+  const maxW = 32
+  const maxH = 24
+  const scale = Math.min(maxW / w, maxH / h)
+  const rw = Math.round(w * scale)
+  const rh = Math.round(h * scale)
+  return (
+    <div style={{
+      width: maxW,
+      height: maxH,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{
+        width: rw,
+        height: rh,
+        borderRadius: 3,
+        border: `2px solid ${active ? ACCENT : BORDER}`,
+        background: active ? `${ACCENT}18` : 'transparent',
+        transition: 'border-color 0.2s ease, background 0.2s ease',
+      }} />
+    </div>
+  )
+}
+
+function DesktopPreview({ post, loadingPost }: { post: PostDetail | null; loadingPost: boolean }) {
+  return (
+    <div style={s.desktopPreviewWrap}>
+      {loadingPost ? (
+        <div className="skeleton" style={{ width: '100%', height: '100%', borderRadius: 20, minHeight: 400 }} />
+      ) : post ? (
+        <img
+          src={getImageUrl(post.id)}
+          alt=""
+          style={s.desktopPreviewImg}
+        />
+      ) : (
+        <div style={s.desktopPreviewEmpty}>
+          <div style={s.desktopPreviewEmptyIcon}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={TEXT_TER} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </div>
+          <p style={s.desktopPreviewHint}>Предпросмотр появится здесь</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GeneratingOverlay({ taskId }: { taskId: string | null }) {
+  return (
+    <div style={s.genOverlay}>
+      <div style={s.genContent}>
+        {/* Lime spinner */}
+        <svg width="80" height="80" viewBox="0 0 80 80" style={{ flexShrink: 0 }}>
+          <circle
+            cx="40"
+            cy="40"
+            r="34"
+            fill="none"
+            stroke="rgba(196,248,42,0.12)"
+            strokeWidth="5"
+          />
+          <circle
+            cx="40"
+            cy="40"
+            r="34"
+            fill="none"
+            stroke={ACCENT}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray="80 134"
+            style={{ animation: 'spin 1.2s linear infinite', transformOrigin: '40px 40px' }}
+          />
+        </svg>
+
+        <p style={s.genTitle}>Генерация...</p>
+        <p style={s.genSubtitle}>Обычно занимает 15-30 секунд</p>
+
+        {/* Progress bar */}
+        <div style={s.progressTrack}>
+          <div style={s.progressFill} />
+        </div>
+
+        {taskId && (
+          <p style={s.genTaskId}>{taskId.slice(0, 8)}...</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ResultView({
+  resultUrl,
+  promptMode,
+  customPrompt,
+  onReset,
+}: {
+  resultUrl: string
+  promptMode: PromptMode
+  customPrompt: string
+  onReset: () => void
 }) {
   return (
-    <button
-      style={{
-        ...optStyles.btn,
-        ...(active ? optStyles.btnActive : {}),
-      }}
-      onClick={onClick}
-    >
-      <div style={optStyles.radio}>
-        {active && <div style={optStyles.radioDot} />}
-      </div>
-      <div>
-        <p style={optStyles.label}>{label}</p>
-        <p style={optStyles.desc}>{description}</p>
-      </div>
-    </button>
-  )
-}
+    <div style={s.resultRoot} className="safe-bottom">
+      <div style={s.resultScroll}>
+        <div style={s.resultImgWrap}>
+          <img src={resultUrl} alt="Generated result" style={s.resultImg} />
+        </div>
 
-function StepIndicator({ current }: { current: Step }) {
-  const steps: Step[] = ['prompt', 'references', 'ratio', 'generating', 'result']
-  const currentIndex = steps.indexOf(current)
-
-  return (
-    <div style={stepStyles.wrap}>
-      {['Prompt', 'Refs', 'Ratio', '', ''].map((label, i) => {
-        if (!label) return null
-        const isActive = i <= currentIndex
-        return (
-          <div key={i} style={stepStyles.item}>
-            <div style={{
-              ...stepStyles.dot,
-              ...(isActive ? stepStyles.dotActive : {}),
-            }} />
-            <span style={{
-              ...stepStyles.label,
-              ...(isActive ? stepStyles.labelActive : {}),
-            }}>{label}</span>
+        {(promptMode === 'custom' || promptMode === 'adapted') && customPrompt && (
+          <div style={s.resultInfoCard}>
+            <p style={s.resultInfoLabel}>Промпт</p>
+            <p style={s.resultInfoText}>{customPrompt}</p>
           </div>
-        )
-      })}
+        )}
+
+        <div style={s.resultActions}>
+          <a
+            href={resultUrl}
+            download
+            style={s.downloadBtn}
+            onClick={() => hapticSuccess()}
+          >
+            <Download size={18} color="#0A0A0A" />
+            Скачать
+          </a>
+          <button style={s.againBtn} onClick={onReset}>
+            <RotateCcw size={18} color={TEXT} />
+            Создать ещё
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
-const optStyles: Record<string, React.CSSProperties> = {
-  btn: {
+// ---- Styles ----
+
+const s: Record<string, React.CSSProperties> = {
+  // Mobile root
+  mobileRoot: {
+    minHeight: '100vh',
+    background: BG,
+    overflowY: 'auto',
+  },
+
+  // Desktop root
+  desktopRoot: {
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    width: '100%',
-    padding: '14px 16px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    cursor: 'pointer',
-    textAlign: 'left',
-    transition: 'border-color 0.2s ease, background 0.2s ease',
+    minHeight: '100vh',
+    background: BG,
   },
-  btnActive: {
-    borderColor: 'var(--accent)',
-    background: 'rgba(168, 85, 247, 0.08)',
+  desktopLeft: {
+    width: 480,
+    flexShrink: 0,
+    borderRight: `1px solid ${BORDER}`,
+    overflowY: 'auto',
   },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: '50%',
-    border: '2px solid var(--border-strong)',
+  desktopRight: {
+    flex: 1,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 2,
+    padding: 40,
+    background: BG,
   },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-    background: 'var(--accent-gradient)',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: 'var(--text)',
-    margin: 0,
-  },
-  desc: {
-    fontSize: 12,
-    color: 'var(--text-tertiary)',
-    margin: '2px 0 0',
-  },
-}
 
-const stepStyles: Record<string, React.CSSProperties> = {
-  wrap: {
+  // Form scroll
+  formScroll: {
     display: 'flex',
-    gap: 20,
-    marginTop: 12,
+    flexDirection: 'column',
   },
-  item: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    transition: 'background 0.3s ease',
-  },
-  dotActive: {
-    background: 'var(--accent)',
-    borderColor: 'var(--accent)',
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: 500,
-    color: 'var(--text-tertiary)',
-    transition: 'color 0.3s ease',
-  },
-  labelActive: {
-    color: 'var(--text)',
-  },
-}
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-  },
+  // Header
   header: {
-    padding: '20px 16px 8px',
+    padding: '24px 20px 8px',
   },
   title: {
-    fontSize: 28,
+    fontFamily: 'var(--font-heading)',
+    fontSize: 24,
     fontWeight: 700,
-    color: 'var(--text)',
+    color: TEXT,
+    margin: 0,
   },
-  center: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '60vh',
-  },
-  emptyText: {
-    color: 'var(--text-tertiary)',
-    fontSize: 15,
-  },
+
+  // Error
   errorBanner: {
-    margin: '0 16px 12px',
+    margin: '0 20px 4px',
     padding: '12px 16px',
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    borderRadius: 'var(--radius-md)',
+    background: 'rgba(239,68,68,0.1)',
+    border: '1px solid rgba(239,68,68,0.25)',
+    borderRadius: 16,
     color: '#EF4444',
     fontSize: 13,
+    fontFamily: 'var(--font-body)',
   },
-  stepContent: {
-    padding: '12px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 16,
-  },
-  previewRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 16px',
-    background: 'var(--surface)',
-    borderRadius: 'var(--radius-md)',
-    border: '1px solid var(--border)',
-  },
-  previewThumb: {
-    width: 48,
-    height: 48,
-    objectFit: 'cover',
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border)',
-  },
-  previewLabel: {
-    fontSize: 12,
-    color: 'var(--text-tertiary)',
-    margin: 0,
-  },
-  previewCategory: {
-    fontSize: 14,
-    fontWeight: 500,
-    color: 'var(--text)',
-    margin: '2px 0 0',
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--text-tertiary)',
-    margin: 0,
-  },
-  optionGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  textareaWrap: {
-    position: 'relative',
-  },
-  textarea: {
-    width: '100%',
-    padding: '12px 16px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    color: 'var(--text)',
-    fontSize: 14,
-    lineHeight: 1.5,
-    outline: 'none',
-    resize: 'vertical',
-    minHeight: 100,
-    transition: 'border-color 0.2s ease',
-  },
-  nextBtn: {
-    width: '100%',
-    marginTop: 8,
-  },
-  refPreview: {
-    display: 'flex',
-    gap: 8,
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-    paddingBottom: 4,
-  },
-  refImg: {
-    width: 100,
-    height: 100,
-    objectFit: 'cover',
-    borderRadius: 'var(--radius-sm)',
-    border: '1px solid var(--border)',
-    flexShrink: 0,
-  },
-  ratioGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 8,
-  },
-  ratioBtn: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 6,
-    padding: '16px 8px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    cursor: 'pointer',
-    transition: 'border-color 0.2s ease, background 0.2s ease',
-  },
-  ratioBtnActive: {
-    borderColor: 'var(--accent)',
-    background: 'rgba(168, 85, 247, 0.08)',
-  },
-  ratioIcon: {
-    fontSize: 18,
-    fontFamily: 'monospace',
-    color: 'var(--text-secondary)',
-  },
-  ratioLabel: {
-    fontSize: 13,
-    fontWeight: 500,
-    color: 'var(--text)',
-  },
-  generatingWrap: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '60vh',
-    gap: 16,
-    padding: '0 32px',
-    textAlign: 'center',
-  },
-  spinner: {
-    animation: 'none',
-  },
-  generatingText: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: 'var(--text)',
-    margin: 0,
-  },
-  generatingHint: {
-    fontSize: 14,
-    color: 'var(--text-tertiary)',
-    margin: 0,
-  },
-  taskId: {
-    fontSize: 11,
-    color: 'var(--text-tertiary)',
-    fontFamily: 'monospace',
-    margin: 0,
-    opacity: 0.5,
-  },
-  resultImageWrap: {
-    borderRadius: 'var(--radius-lg)',
-    overflow: 'hidden',
-    border: '1px solid var(--border)',
-  },
-  resultImage: {
-    width: '100%',
-    display: 'block',
-  },
-  resultActions: {
+
+  // Sections
+  section: {
+    padding: '12px 20px',
     display: 'flex',
     flexDirection: 'column',
     gap: 10,
   },
-  downloadBtn: {
-    width: '100%',
-    textDecoration: 'none',
+  sectionLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.08em',
+    color: TEXT_TER,
+    margin: 0,
   },
-  newGenBtn: {
+
+  // Post preview card
+  postCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    padding: '12px 14px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 16,
+  },
+  postThumb: {
+    width: 48,
+    height: 48,
+    objectFit: 'cover' as const,
+    borderRadius: 8,
+    border: `1px solid ${BORDER}`,
+    flexShrink: 0,
+  },
+  postCardLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 11,
+    color: TEXT_TER,
+    margin: 0,
+  },
+  postCardCategory: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 14,
+    fontWeight: 600,
+    color: TEXT,
+    margin: '2px 0 0',
+  },
+
+  // Prompt mode tabs
+  tabRow: {
+    display: 'flex',
+    gap: 6,
+  },
+  tab: {
+    flex: 1,
+    padding: '10px 6px',
+    borderRadius: 100,
+    border: `1px solid ${BORDER}`,
+    fontFamily: 'var(--font-body)',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease',
+  },
+  tabActive: {
+    background: ACCENT,
+    borderColor: ACCENT,
+    color: '#0A0A0A',
+    fontWeight: 600,
+  },
+  tabInactive: {
+    background: SURFACE,
+    color: TEXT_SEC,
+  },
+
+  // Textarea
+  textarea: {
     width: '100%',
-    padding: '12px 24px',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-pill)',
-    color: 'var(--text)',
+    padding: '14px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 16,
+    color: TEXT,
+    fontFamily: 'var(--font-body)',
+    fontSize: 14,
+    lineHeight: '1.5',
+    outline: 'none',
+    resize: 'vertical' as const,
+    minHeight: 100,
+    transition: 'border-color 0.2s ease',
+    boxSizing: 'border-box' as const,
+  },
+  textareaFocused: {
+    borderColor: ACCENT,
+  },
+
+  // References toggle
+  refToggleRow: {
+    display: 'flex',
+    gap: 8,
+  },
+  refToggleBtn: {
+    flex: 1,
+    padding: '10px 12px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 100,
+    color: TEXT_SEC,
+    fontFamily: 'var(--font-body)',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    transition: 'border-color 0.15s ease, color 0.15s ease',
+  },
+  refToggleBtnActive: {
+    borderColor: ACCENT,
+    color: ACCENT,
+  },
+
+  // Aspect ratio
+  ratioRow: {
+    display: 'flex',
+    gap: 8,
+  },
+  ratioBtn: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 8,
+    padding: '14px 8px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 16,
+    cursor: 'pointer',
+    transition: 'border-color 0.15s ease, background 0.15s ease',
+  },
+  ratioBtnActive: {
+    borderColor: ACCENT,
+    background: `${ACCENT}10`,
+  },
+  ratioLabel: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 12,
+    fontWeight: 500,
+    color: TEXT_SEC,
+    transition: 'color 0.15s ease',
+  },
+
+  // Model grid
+  modelGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 8,
+  },
+  modelCard: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    gap: 4,
+    padding: '14px 14px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 16,
+    cursor: 'pointer',
+    textAlign: 'left' as const,
+    transition: 'border-color 0.15s ease, background 0.15s ease',
+  },
+  modelCardActive: {
+    borderColor: ACCENT,
+    background: `${ACCENT}0D`,
+  },
+  modelName: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 14,
+    fontWeight: 700,
+    color: TEXT,
+    margin: 0,
+    transition: 'color 0.15s ease',
+  },
+  modelDesc: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 11,
+    color: TEXT_TER,
+    margin: 0,
+    lineHeight: 1.4,
+  },
+  modelCost: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    fontWeight: 600,
+    color: TEXT_SEC,
+    margin: '2px 0 0',
+    transition: 'color 0.15s ease',
+  },
+
+  // CTA
+  ctaSection: {
+    padding: '12px 20px 32px',
+  },
+  generateBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    padding: '16px 24px',
+    background: ACCENT,
+    border: 'none',
+    borderRadius: 100,
+    color: '#0A0A0A',
+    fontFamily: 'var(--font-heading)',
+    fontSize: 16,
+    fontWeight: 700,
+    cursor: 'pointer',
+    transition: 'opacity 0.15s ease, transform 0.15s ease',
+  },
+  generateBtnDisabled: {
+    background: SURFACE,
+    color: TEXT_TER,
+    cursor: 'not-allowed',
+  },
+
+  // Desktop preview
+  desktopPreviewWrap: {
+    width: '100%',
+    maxWidth: 560,
+    borderRadius: 20,
+    overflow: 'hidden',
+    border: `1px solid ${BORDER}`,
+    minHeight: 400,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: SURFACE,
+  },
+  desktopPreviewImg: {
+    width: '100%',
+    display: 'block',
+  },
+  desktopPreviewEmpty: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 12,
+    padding: 40,
+  },
+  desktopPreviewEmptyIcon: {
+    opacity: 0.4,
+  },
+  desktopPreviewHint: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 14,
+    color: TEXT_TER,
+    margin: 0,
+  },
+
+  // Generating overlay
+  genOverlay: {
+    position: 'fixed' as const,
+    inset: 0,
+    background: 'rgba(10,10,10,0.95)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+  },
+  genContent: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: 16,
+    padding: '0 32px',
+    textAlign: 'center' as const,
+  },
+  genTitle: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 20,
+    fontWeight: 700,
+    color: TEXT,
+    margin: 0,
+  },
+  genSubtitle: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 14,
+    color: TEXT_SEC,
+    margin: 0,
+  },
+  progressTrack: {
+    width: 200,
+    height: 4,
+    background: SURFACE,
+    borderRadius: 100,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  progressFill: {
+    height: '100%',
+    background: ACCENT,
+    borderRadius: 100,
+    animation: 'progressPulse 2s ease-in-out infinite',
+    width: '60%',
+  },
+  genTaskId: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    color: TEXT_TER,
+    margin: 0,
+    opacity: 0.5,
+  },
+
+  // Result
+  resultRoot: {
+    minHeight: '100vh',
+    background: BG,
+  },
+  resultScroll: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 16,
+    padding: '24px 20px 32px',
+  },
+  resultImgWrap: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    border: `1px solid ${BORDER}`,
+  },
+  resultImg: {
+    width: '100%',
+    display: 'block',
+  },
+  resultInfoCard: {
+    padding: '14px 16px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 16,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+  },
+  resultInfoLabel: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 11,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    color: TEXT_TER,
+    margin: 0,
+  },
+  resultInfoText: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 13,
+    color: TEXT_SEC,
+    margin: 0,
+    lineHeight: 1.5,
+  },
+  resultActions: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 10,
+  },
+  downloadBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    padding: '16px 24px',
+    background: ACCENT,
+    border: 'none',
+    borderRadius: 100,
+    color: '#0A0A0A',
+    fontFamily: 'var(--font-heading)',
+    fontSize: 15,
+    fontWeight: 700,
+    cursor: 'pointer',
+    textDecoration: 'none',
+    boxSizing: 'border-box' as const,
+    transition: 'opacity 0.15s ease',
+  },
+  againBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    padding: '14px 24px',
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    borderRadius: 100,
+    color: TEXT,
+    fontFamily: 'var(--font-body)',
     fontSize: 15,
     fontWeight: 500,
     cursor: 'pointer',
-    transition: 'transform 0.15s ease, background 0.15s ease',
+    transition: 'background 0.15s ease',
   },
 }

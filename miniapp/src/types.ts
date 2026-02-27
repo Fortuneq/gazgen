@@ -29,12 +29,15 @@ export interface SearchResult extends Post {
   similarity: number;
 }
 
+export type ModelTier = 'nano' | 'standard' | 'pro' | 'ultra';
+
 export interface GenerateRequest {
   post_id: number;
   prompt_mode: 'original' | 'custom' | 'adapted';
   custom_prompt?: string;
   aspect_ratio?: string;
   use_references?: boolean;
+  model?: ModelTier;
 }
 
 export interface GenerateStatus {
@@ -50,4 +53,32 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   has_more: boolean;
+}
+
+export interface UserProfile {
+  id: number;
+  username: string;
+  firstName: string;
+  lastName: string;
+  photoUrl: string;
+  credits: number;
+}
+
+export interface PricingPack {
+  id: string;
+  name: string;
+  count: number;
+  price: number;
+  pricePerUnit: number;
+  popular?: boolean;
+}
+
+export interface ModelInfo {
+  id: ModelTier;
+  name: string;
+  description: string;
+  creditsPerPhoto: number;
+  creditsPerVideo: number;
+  photoPacks: PricingPack[];
+  videoPacks: PricingPack[];
 }

@@ -1,40 +1,22 @@
 import { type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { Compass, Search, Sparkles, User } from 'lucide-react'
 import { haptic } from '../telegram'
+import { useIsDesktop } from '../hooks/useMediaQuery'
 
-const navItems = [
-  {
-    to: '/',
-    label: 'Explore',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-      </svg>
-    ),
-  },
-  {
-    to: '/search',
-    label: 'Search',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-    ),
-  },
-  {
-    to: '/generate/0',
-    label: 'Generate',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3z" />
-        <path d="M18 14l1 3.5L22.5 18l-3.5 1L18 22.5l-1-3.5L13.5 18l3.5-1L18 14z" />
-      </svg>
-    ),
-  },
+const mobileNavItems = [
+  { to: '/', label: 'Explore', icon: Compass },
+  { to: '/search', label: 'Search', icon: Search },
+  { to: '/generate', label: 'Create', icon: Sparkles },
+  { to: '/profile', label: 'Profile', icon: User },
+]
+
+const desktopNavLinks = [
+  { to: '/', label: 'Explore' },
+  { to: '/search', label: 'Search' },
+  { to: '/generate', label: 'Create' },
+  { to: '/pricing', label: 'Pricing' },
+  { to: '/animate', label: 'Animate' },
 ]
 
 interface LayoutProps {
@@ -43,46 +25,77 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
+  const isDesktop = useIsDesktop()
 
-  const isNavVisible = !location.pathname.startsWith('/post/') &&
-    !location.pathname.match(/^\/generate\/[1-9]/)
+  const isDetailPage = location.pathname.startsWith('/post/')
+  const isNavVisible = !isDetailPage
+
+  const getIsActive = (to: string) => {
+    if (to === '/') return location.pathname === '/'
+    return location.pathname.startsWith(to)
+  }
 
   return (
     <div style={{ minHeight: '100vh', minBlockSize: '100dvh' }}>
-      <main>{children}</main>
+      {isDesktop && (
+        <header style={styles.desktopHeader}>
+          <div style={styles.desktopHeaderInner}>
+            <NavLink to="/" style={styles.desktopLogo}>
+              <span style={styles.desktopLogoText}>Photix</span>
+              <span style={styles.desktopLogoDot}>.</span>
+            </NavLink>
 
-      {isNavVisible && (
-        <nav style={styles.nav}>
-          <div style={styles.navInner}>
-            {navItems.map((item) => {
-              const isActive = item.to === '/'
-                ? location.pathname === '/'
-                : location.pathname.startsWith(item.to)
+            <nav style={styles.desktopNav}>
+              {desktopNavLinks.map((link) => {
+                const isActive = getIsActive(link.to)
+                return (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    style={{
+                      ...styles.desktopNavLink,
+                      color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {link.label}
+                  </NavLink>
+                )
+              })}
+            </nav>
 
+            <div style={styles.desktopCreditsBadge}>
+              <span style={styles.desktopCreditsText}>100 ⚡</span>
+            </div>
+          </div>
+        </header>
+      )}
+
+      <main style={isDesktop ? styles.mainDesktop : undefined}>
+        {children}
+      </main>
+
+      {!isDesktop && isNavVisible && (
+        <nav style={styles.mobileNav}>
+          <div style={styles.mobileNavInner}>
+            {mobileNavItems.map((item) => {
+              const isActive = getIsActive(item.to)
+              const IconComponent = item.icon
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   onClick={() => haptic('light')}
-                  style={{
-                    ...styles.navItem,
-                    color: isActive ? 'transparent' : 'var(--text-secondary)',
-                  }}
+                  style={styles.mobileNavItem}
                 >
                   <div style={{
-                    ...styles.iconWrap,
-                    ...(isActive ? styles.iconActive : {}),
+                    ...styles.mobileIconWrap,
+                    color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
                   }}>
-                    {item.icon}
+                    <IconComponent size={24} strokeWidth={1.8} />
                   </div>
                   <span style={{
-                    ...styles.navLabel,
-                    ...(isActive ? {
-                      background: 'var(--accent-gradient)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                    } : {}),
+                    ...styles.mobileNavLabel,
+                    color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
                   }}>
                     {item.label}
                   </span>
@@ -97,19 +110,90 @@ export default function Layout({ children }: LayoutProps) {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  nav: {
+  desktopHeader: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    background: 'rgba(10, 10, 10, 0.9)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderBottom: '1px solid var(--border)',
+    height: 'var(--nav-height)',
+  },
+  desktopHeaderInner: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    maxWidth: 1280,
+    margin: '0 auto',
+    padding: '0 32px',
+    height: '100%',
+  },
+  desktopLogo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1,
+    textDecoration: 'none',
+    flexShrink: 0,
+  },
+  desktopLogoText: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 24,
+    fontWeight: 800,
+    color: '#FFFFFF',
+    lineHeight: 1,
+  },
+  desktopLogoDot: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 24,
+    fontWeight: 800,
+    color: 'var(--accent)',
+    lineHeight: 1,
+  },
+  desktopNav: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 32,
+  },
+  desktopNavLink: {
+    fontFamily: 'var(--font-body)',
+    fontSize: 15,
+    fontWeight: 500,
+    textDecoration: 'none',
+    transition: 'color 0.2s ease',
+  },
+  desktopCreditsBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '6px 14px',
+    background: 'var(--accent)',
+    borderRadius: 'var(--radius-pill)',
+    flexShrink: 0,
+  },
+  desktopCreditsText: {
+    fontFamily: 'var(--font-heading)',
+    fontSize: 14,
+    fontWeight: 700,
+    color: '#0A0A0A',
+  },
+  mainDesktop: {
+    paddingTop: 'var(--nav-height)',
+  },
+  mobileNav: {
     position: 'fixed',
     bottom: 0,
     left: 0,
     right: 0,
     zIndex: 100,
-    background: 'rgba(15, 17, 19, 0.85)',
+    background: 'rgba(10, 10, 10, 0.9)',
     backdropFilter: 'blur(20px)',
     WebkitBackdropFilter: 'blur(20px)',
     borderTop: '1px solid var(--border)',
     paddingBottom: 'var(--safe-area-bottom)',
   },
-  navInner: {
+  mobileNavInner: {
     display: 'flex',
     justifyContent: 'space-around',
     alignItems: 'center',
@@ -117,31 +201,25 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 480,
     margin: '0 auto',
   },
-  navItem: {
+  mobileNavItem: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: 4,
     textDecoration: 'none',
     WebkitTapHighlightColor: 'transparent',
-    transition: 'color 0.2s ease',
   },
-  iconWrap: {
+  mobileIconWrap: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: 32,
     height: 32,
-    color: 'var(--text-secondary)',
     transition: 'color 0.2s ease',
   },
-  iconActive: {
-    color: 'var(--accent)',
-  },
-  navLabel: {
+  mobileNavLabel: {
     fontSize: 11,
     fontWeight: 500,
-    color: 'var(--text-secondary)',
     transition: 'color 0.2s ease',
   },
 }

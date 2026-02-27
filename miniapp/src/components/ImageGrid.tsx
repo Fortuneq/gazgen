@@ -8,55 +8,64 @@ interface ImageGridProps {
 
 export default function ImageGrid({ posts, startIndex = 0 }: ImageGridProps) {
   return (
-    <div style={styles.grid}>
-      <div style={styles.column}>
-        {posts
-          .filter((_, i) => i % 2 === 0)
-          .map((post, i) => (
-            <PostCard key={post.id} post={post} index={startIndex + i * 2} />
-          ))}
+    <>
+      <style>{`
+        .image-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+          padding: 0 16px;
+        }
+        @media (min-width: 768px) {
+          .image-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+          }
+        }
+        @media (min-width: 1440px) {
+          .image-grid {
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+          }
+        }
+      `}</style>
+      <div className="image-grid">
+        {posts.map((post, i) => (
+          <PostCard key={post.id} post={post} index={startIndex + i} />
+        ))}
       </div>
-      <div style={styles.column}>
-        {posts
-          .filter((_, i) => i % 2 === 1)
-          .map((post, i) => (
-            <PostCard key={post.id} post={post} index={startIndex + i * 2 + 1} />
-          ))}
-      </div>
-    </div>
+    </>
   )
 }
 
 export function SkeletonGrid() {
   return (
-    <div style={styles.grid}>
-      <div style={styles.column}>
-        {[200, 260, 220].map((h, i) => (
-          <div key={i} className="skeleton" style={{ ...styles.skeletonCard, height: h }} />
+    <>
+      <style>{`
+        .image-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 8px;
+          padding: 0 16px;
+        }
+        @media (min-width: 768px) {
+          .image-grid {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+          }
+        }
+        @media (min-width: 1440px) {
+          .image-grid {
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+          }
+        }
+      `}</style>
+      <div className="image-grid">
+        {[200, 260, 220, 240, 200, 250].map((h, i) => (
+          <div key={i} className="skeleton" style={{ borderRadius: 'var(--radius-md)', height: h }} />
         ))}
       </div>
-      <div style={styles.column}>
-        {[240, 200, 250].map((h, i) => (
-          <div key={i} className="skeleton" style={{ ...styles.skeletonCard, height: h }} />
-        ))}
-      </div>
-    </div>
+    </>
   )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  grid: {
-    display: 'flex',
-    gap: 8,
-    padding: '0 16px',
-  },
-  column: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  skeletonCard: {
-    borderRadius: 'var(--radius-md)',
-    marginBottom: 8,
-  },
 }
