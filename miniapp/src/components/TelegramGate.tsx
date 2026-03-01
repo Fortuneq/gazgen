@@ -1,77 +1,148 @@
 import type { ReactNode } from "react";
 import { getTelegram } from "../telegram";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { Send } from "lucide-react";
+
+function isInsideTelegram(): boolean {
+  const tg = getTelegram();
+  if (!tg) return false;
+  // telegram-web-app.js creates window.Telegram.WebApp even in browser,
+  // but initData is empty and platform is "unknown" outside Telegram
+  if (tg.initData) return true;
+  if (tg.platform && tg.platform !== "unknown") return true;
+  return false;
+}
 
 export function TelegramGate({ children }: { children: ReactNode }) {
-  // If window.Telegram.WebApp exists, we're inside Telegram — render app.
-  // initData can be empty in some Telegram clients, so we check the object itself.
-  if (getTelegram()) return <>{children}</>;
+  if (isInsideTelegram()) return <>{children}</>;
 
+  return <AuthScreen />;
+}
+
+function AuthScreen() {
+  const isDesktop = useIsDesktop();
+
+  const logo = (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: isDesktop ? 12 : 16 }}>
+      <span style={{
+        fontFamily: "'Space Grotesk', sans-serif",
+        fontSize: isDesktop ? 36 : 32,
+        fontWeight: 800,
+        color: "#FFFFFF",
+      }}>Photix</span>
+      <span style={{
+        fontFamily: "'Manrope', sans-serif",
+        fontSize: 14,
+        fontWeight: 500,
+        color: "#71717A",
+        letterSpacing: 2,
+      }}>AI PHOTO GENERATOR</span>
+    </div>
+  );
+
+  const icon = (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      width: isDesktop ? 96 : 80, height: isDesktop ? 96 : 80,
+      borderRadius: isDesktop ? 24 : 20,
+      background: "#2AABEE",
+    }}>
+      <Send size={isDesktop ? 44 : 36} color="#FFFFFF" />
+    </div>
+  );
+
+  const desc = (
+    <span style={{
+      fontFamily: "'Manrope', sans-serif",
+      fontSize: 16, fontWeight: 500, color: "#A1A1AA",
+      textAlign: "center",
+      width: isDesktop ? 340 : 260,
+      lineHeight: 1.5,
+    }}>
+      {isDesktop
+        ? "Войдите через Telegram, чтобы продолжить"
+        : "Войдите через Telegram,\nчтобы продолжить"}
+    </span>
+  );
+
+  const btn = (
+    <a
+      href="https://t.me/PhotixRobot/app"
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        gap: 10, height: 56, width: "100%",
+        borderRadius: 14, background: "#2AABEE",
+        textDecoration: "none",
+      }}
+    >
+      <Send size={20} color="#FFFFFF" />
+      <span style={{
+        fontFamily: "'Manrope', sans-serif",
+        fontSize: 16, fontWeight: 700, color: "#FFFFFF",
+      }}>Войти через Telegram</span>
+    </a>
+  );
+
+  const footer = (
+    <span style={{
+      fontFamily: "'Manrope', sans-serif",
+      fontSize: isDesktop ? 13 : 12,
+      color: "#3F3F46",
+      textAlign: "center",
+      width: isDesktop ? 340 : 260,
+    }}>
+      Авторизация необходима для использования сервиса
+    </span>
+  );
+
+  if (isDesktop) {
+    return (
+      <div style={{
+        minHeight: "100vh", display: "flex", alignItems: "center",
+        justifyContent: "center", background: "#0A0A0A",
+      }}>
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          gap: 48, padding: 48, width: 480,
+          borderRadius: 24, background: "#18181B",
+          border: "1px solid #27272A",
+        }}>
+          {logo}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+            {icon}
+            {desc}
+          </div>
+          {btn}
+          {footer}
+        </div>
+      </div>
+    );
+  }
+
+  // Mobile
   return (
     <div style={{
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 24,
-      padding: 32,
-      background: "#0A0A0A",
-      color: "#FFFFFF",
-      fontFamily: "'Manrope', sans-serif",
-      textAlign: "center",
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "#0A0A0A", padding: "0 40px",
     }}>
-      {/* Logo */}
       <div style={{
-        width: 80, height: 80, borderRadius: 20,
-        background: "rgba(196, 248, 42, 0.15)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'Space Grotesk', sans-serif",
-        fontSize: 32, fontWeight: 800, color: "#C4F82A",
+        display: "flex", flexDirection: "column", alignItems: "center",
+        gap: 40, width: "100%",
       }}>
-        P
+        {logo}
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          gap: 24, width: "100%",
+        }}>
+          {icon}
+          {desc}
+          {btn}
+        </div>
+        {footer}
       </div>
-
-      <h1 style={{
-        fontFamily: "'Space Grotesk', sans-serif",
-        fontSize: 24,
-        fontWeight: 700,
-        margin: 0,
-      }}>
-        Откройте приложение через Telegram
-      </h1>
-
-      <p style={{
-        fontSize: 15,
-        color: "#A1A1AA",
-        maxWidth: 340,
-        margin: 0,
-        lineHeight: 1.5,
-      }}>
-        Photix работает как мини-приложение Telegram.
-        Нажмите кнопку ниже, чтобы открыть бота.
-      </p>
-
-      <a
-        href="https://t.me/PhotixRobot"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          marginTop: 8,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "14px 32px",
-          borderRadius: 100,
-          background: "#C4F82A",
-          textDecoration: "none",
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontSize: 15,
-          fontWeight: 700,
-          color: "#0A0A0A",
-        }}
-      >
-        Открыть в Telegram
-      </a>
     </div>
   );
 }

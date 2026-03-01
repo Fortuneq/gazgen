@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { haptic } from "../telegram";
 import type { Gender, AspectRatio, PostDetail } from "../types";
 import {
@@ -23,15 +23,15 @@ interface ModelDef {
 const ALL_FORMATS: AspectRatio[] = ["1:1", "16:9", "9:16"];
 
 const MODELS: ModelDef[] = [
-  { id: "nano_banana", name: "Nano Banana", desc: "Быстрая генерация, базовое качество", price: "1 кр", priceNum: 1, type: "text2img", formats: ALL_FORMATS },
-  { id: "banana", name: "Nano Banana Pro", desc: "Улучшенное качество", price: "2 кр", priceNum: 2, type: "text2img", formats: ALL_FORMATS },
-  { id: "seedream", name: "Seedream 4.5", desc: "Реалистичные фото", price: "2 кр", priceNum: 2, type: "text2img", formats: ALL_FORMATS },
-  { id: "seedream_v4", name: "Seedream V4", desc: "Новое поколение", price: "2 кр", priceNum: 2, type: "text2img", formats: ALL_FORMATS },
-  { id: "gpt_text", name: "GPT Image", desc: "OpenAI text-to-image", price: "3 кр", priceNum: 3, type: "text2img", formats: ALL_FORMATS },
-  { id: "gpt_img2img", name: "GPT Img2Img", desc: "OpenAI image-to-image", price: "4 кр", priceNum: 4, type: "img2img", formats: ALL_FORMATS },
-  { id: "gpt4o", name: "GPT-4o", desc: "GPT-4o нативная генерация", price: "5 кр", priceNum: 5, type: "text/img2img", formats: ALL_FORMATS },
-  { id: "qwen", name: "Qwen", desc: "Alibaba модель", price: "3 кр", priceNum: 3, type: "text2img", formats: ALL_FORMATS },
-  { id: "grok", name: "Grok Imagine", desc: "xAI модель", price: "3 кр", priceNum: 3, type: "text2img", formats: ALL_FORMATS },
+  { id: "nano_banana", name: "Nano Banana", desc: "Быстрая генерация, базовое качество", price: "9 ткн", priceNum: 9, type: "text2img", formats: ALL_FORMATS },
+  { id: "banana", name: "Nano Banana Pro", desc: "Улучшенное качество", price: "19 ткн", priceNum: 19, type: "text2img", formats: ALL_FORMATS },
+  { id: "seedream", name: "Seedream 4.5", desc: "Реалистичные фото", price: "9 ткн", priceNum: 9, type: "text2img", formats: ALL_FORMATS },
+  { id: "seedream_v4", name: "Seedream V4", desc: "Новое поколение", price: "9 ткн", priceNum: 9, type: "text2img", formats: ALL_FORMATS },
+  { id: "gpt_text", name: "GPT Image", desc: "OpenAI text-to-image", price: "19 ткн", priceNum: 19, type: "text2img", formats: ALL_FORMATS },
+  { id: "gpt_img2img", name: "GPT Img2Img", desc: "OpenAI image-to-image", price: "19 ткн", priceNum: 19, type: "img2img", formats: ALL_FORMATS },
+  { id: "gpt4o", name: "GPT-4o", desc: "GPT-4o нативная генерация", price: "35 ткн", priceNum: 35, type: "text/img2img", formats: ALL_FORMATS },
+  { id: "qwen", name: "Qwen", desc: "Alibaba модель", price: "9 ткн", priceNum: 9, type: "text2img", formats: ALL_FORMATS },
+  { id: "grok", name: "Grok Imagine", desc: "xAI модель", price: "9 ткн", priceNum: 9, type: "text2img", formats: ALL_FORMATS },
 ];
 
 const GENDERS: { key: Gender; label: string }[] = [
@@ -68,6 +68,13 @@ export default function GeneratePage() {
   const [post, setPost] = useState<PostDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [showRefTooltip, setShowRefTooltip] = useState(false);
+
+  // Credits
+  const [photoCredits, setPhotoCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getProfile().then((p) => setPhotoCredits(p.photo_credits)).catch(() => {});
+  }, []);
 
   // Standalone mode: uploaded references
   const [uploadedRefs, setUploadedRefs] = useState<UploadedRef[]>([]);
@@ -158,7 +165,11 @@ export default function GeneratePage() {
         });
         navigate(`/loading/${res.task_id}`);
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 402) {
+        navigate("/pricing");
+        return;
+      }
       setLoading(false);
     }
   }
@@ -440,7 +451,7 @@ export default function GeneratePage() {
       }}>
       <Sparkles size={20} color="#0A0A0A" />
       <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#0A0A0A" }}>
-        {loading ? "Отправка..." : `Создать — ${selectedModel.priceNum} кредит`}
+        {loading ? "Отправка..." : `Создать — ${selectedModel.priceNum} токенов`}
       </span>
     </button>
   );
@@ -573,7 +584,7 @@ export default function GeneratePage() {
             }}>
               <Coins size={14} color="#C4F82A" />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#C4F82A" }}>
-                47 токенов
+                {photoCredits ?? "…"} токенов
               </span>
             </div>
           </div>

@@ -53,6 +53,14 @@ class TagOut(BaseModel):
     post_count: int
 
 
+class ProfileOut(BaseModel):
+    telegram_id: int
+    first_name: str | None
+    username: str | None
+    photo_credits: int
+    video_credits: int
+
+
 class GenerateRequest(BaseModel):
     post_id: int
     prompt_mode: str = "original"

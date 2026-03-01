@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HashRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TelegramGate } from "./components/TelegramGate";
@@ -14,11 +14,11 @@ try {
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <ErrorBoundary>
-        <HashRouter>
+        <MemoryRouter>
           <TelegramGate>
             <App />
           </TelegramGate>
-        </HashRouter>
+        </MemoryRouter>
       </ErrorBoundary>
     </React.StrictMode>
   );

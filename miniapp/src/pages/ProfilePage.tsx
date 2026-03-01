@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic, getUser } from "../telegram";
-import { Image, Video, Timer, X } from "lucide-react";
+import { api } from "../api";
+import { Coins, Timer, X } from "lucide-react";
 
 type ProfileFilter = "all" | "photo" | "video" | "favorites";
 
@@ -25,6 +26,13 @@ export default function ProfilePage() {
   const user = getUser();
   const [filter, setFilter] = useState<ProfileFilter>("all");
   const [showWarning, setShowWarning] = useState(true);
+  const [photoCredits, setPhotoCredits] = useState(0);
+
+  useEffect(() => {
+    api.getProfile().then((p) => {
+      setPhotoCredits(p.photo_credits);
+    }).catch(() => {});
+  }, []);
 
   const initials = user
     ? (user.first_name?.[0] ?? "") + (user.last_name?.[0] ?? "")
@@ -103,12 +111,8 @@ export default function ProfilePage() {
           }}>
             <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "var(--text-muted)" }}>Баланс:</span>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Image size={18} color="var(--accent)" />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>47 фото</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Video size={18} color="var(--accent)" />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>3 видео</span>
+              <Coins size={18} color="var(--accent)" />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{photoCredits} токенов</span>
             </div>
             <button onClick={() => navigate("/pricing")}
               style={{
@@ -177,15 +181,9 @@ export default function ProfilePage() {
         }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 500, color: "#52525B" }}>Баланс</span>
-            <div style={{ display: "flex", gap: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <Image size={14} color="var(--accent)" />
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>47 фото</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <Video size={14} color="var(--accent)" />
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>3 видео</span>
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <Coins size={14} color="var(--accent)" />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{photoCredits} токенов</span>
             </div>
           </div>
           <button onClick={() => navigate("/pricing")}

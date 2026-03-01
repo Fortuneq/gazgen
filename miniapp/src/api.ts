@@ -2,6 +2,14 @@ import { getInitData } from "./telegram";
 
 const BASE = "/api";
 
+class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const initData = getInitData();
   const headers: Record<string, string> = {
@@ -14,9 +22,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     headers,
     ...options,
   });
-  if (!res.ok) throw new Error(`API Error: ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, `API Error: ${res.status}`);
   return res.json();
 }
+
+export { ApiError };
 
 export const api = {
   // Posts
@@ -85,6 +95,9 @@ export const api = {
   },
   getGenerationStatus: (taskId: string) =>
     request<import("./types").GenerateStatus>(`/generate/${taskId}/status`),
+
+  // Profile
+  getProfile: () => request<import("./types").UserProfile>("/profile"),
 
   // Health
   health: () => request<{ status: string }>("/health"),

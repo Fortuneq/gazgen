@@ -71,6 +71,14 @@ export interface GenerateStatus {
   error?: string;
 }
 
+export interface UserProfile {
+  telegram_id: number;
+  first_name: string | null;
+  username: string | null;
+  photo_credits: number;
+  video_credits: number;
+}
+
 export type Gender = "male" | "female" | "unisex";
 export type PromptMode = "original" | "custom";
 export type AspectRatio = "1:1" | "16:9" | "9:16";

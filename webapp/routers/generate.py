@@ -23,9 +23,52 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _get_model_cost(pool, model_key: str) -> int:
+    """Get credit cost for a model from DB, default 1."""
+    row = await pool.fetchrow(
+        "SELECT credit_cost FROM model_prices WHERE model_key = $1", model_key
+    )
+    return row["credit_cost"] if row else 1
+
+
+async def _check_and_deduct(pool, telegram_id: int, model_key: str, task_id: str):
+    """Check user has enough credits for model, deduct and log transaction."""
+    cost = await _get_model_cost(pool, model_key)
+    credit_row = await pool.fetchrow(
+        "SELECT photo_credits FROM users WHERE telegram_id = $1", telegram_id
+    )
+    if not credit_row or credit_row["photo_credits"] < cost:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Недостаточно кредитов (нужно {cost})",
+        )
+    await pool.execute(
+        "UPDATE users SET photo_credits = photo_credits - $1 "
+        "WHERE telegram_id = $2 AND photo_credits >= $1",
+        cost, telegram_id,
+    )
+    await pool.execute(
+        "INSERT INTO credit_transactions (telegram_id, credit_type, amount, reason, task_id) "
+        "VALUES ($1, 'photo', $2, 'generation', $3)",
+        telegram_id, -cost, task_id,
+    )
+
+
 @router.post("/generate", response_model=GenerateResponse)
 async def start_generation(req: GenerateRequest, user: dict = Depends(get_current_user)):
     pool = get_pool()
+    telegram_id = user["id"]
+
+    # Resolve model key
+    model_key = req.model or "nano_banana"
+
+    # Pre-check credits before heavy work
+    cost = await _get_model_cost(pool, model_key)
+    credit_row = await pool.fetchrow(
+        "SELECT photo_credits FROM users WHERE telegram_id = $1", telegram_id
+    )
+    if not credit_row or credit_row["photo_credits"] < cost:
+        raise HTTPException(status_code=402, detail=f"Недостаточно кредитов (нужно {cost})")
 
     row = await pool.fetchrow(
         "SELECT id, prompt, model_name FROM posts WHERE id = $1", req.post_id
@@ -67,11 +110,24 @@ async def start_generation(req: GenerateRequest, user: dict = Depends(get_curren
     )
     logger.info("Created generation task %s for model %s", task_id, model_id)
 
+    await _check_and_deduct(pool, telegram_id, model_key, task_id)
+
     return GenerateResponse(task_id=task_id)
 
 
 @router.post("/generate/direct", response_model=GenerateResponse)
 async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depends(get_current_user)):
+    pool = get_pool()
+    telegram_id = user["id"]
+
+    # Pre-check credits
+    cost = await _get_model_cost(pool, req.model)
+    credit_row = await pool.fetchrow(
+        "SELECT photo_credits FROM users WHERE telegram_id = $1", telegram_id
+    )
+    if not credit_row or credit_row["photo_credits"] < cost:
+        raise HTTPException(status_code=402, detail=f"Недостаточно кредитов (нужно {cost})")
+
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required")
 
@@ -83,6 +139,9 @@ async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depen
         raise HTTPException(status_code=400, detail=str(e))
 
     logger.info("Created direct generation task %s for model key %s", task_id, req.model)
+
+    await _check_and_deduct(pool, telegram_id, req.model, task_id)
+
     return GenerateResponse(task_id=task_id)
 
 
