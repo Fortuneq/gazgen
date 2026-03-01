@@ -1,44 +1,37 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
-import { GenderFilter } from "../components/GenderFilter";
 import { ImageGrid } from "../components/ImageGrid";
 import { api } from "../api";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic } from "../telegram";
-import type { Post, Tag, Gender } from "../types";
+import type { Post, Tag } from "../types";
 import { Sparkles, Play, ChevronRight, Clapperboard } from "lucide-react";
 
-const GENDER_TO_TAG: Record<Gender, string> = {
-  male: "male",
-  female: "female",
-  unisex: "",
-};
+const HIDDEN_TAGS = new Set(["male", "female"]);
 
 export default function HomePage() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
-  const [gender, setGender] = useState<Gender>("male");
   const [posts, setPosts] = useState<Post[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   const loadData = useCallback(() => {
-    const tag = GENDER_TO_TAG[gender] || undefined;
     setLoading(true);
     setError(false);
     Promise.all([
-      api.getPosts({ tag, limit: 20 }),
+      api.getPosts({ limit: 20 }),
       api.getTags(),
     ]).then(([postsData, tagsData]) => {
       setPosts(postsData.items);
-      setTags(tagsData);
+      setTags(tagsData.filter((t) => !HIDDEN_TAGS.has(t.name)));
     }).catch((err) => {
       console.error(err);
       setError(true);
     }).finally(() => setLoading(false));
-  }, [gender]);
+  }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -247,9 +240,6 @@ export default function HomePage() {
   // Mobile layout
   return (
     <Layout showCredits>
-      {/* Gender Filter */}
-      <GenderFilter value={gender} onChange={setGender} />
-
       {/* Featured Tags */}
       <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

@@ -6,9 +6,9 @@ from webapp.models import TagOut
 
 router = APIRouter()
 
+HIDDEN_TAGS = {"male", "female"}
+
 TAG_DISPLAY = {
-    "male": {"display_name": "Мужское", "emoji": "👨"},
-    "female": {"display_name": "Женское", "emoji": "👩"},
     "couple": {"display_name": "Пары", "emoji": "💑"},
     "group": {"display_name": "Группа", "emoji": "👥"},
     "landscape": {"display_name": "Пейзажи", "emoji": "🏞"},
@@ -37,6 +37,8 @@ async def list_tags():
     result = []
     for r in rows:
         tag_name = r["tag"]
+        if tag_name in HIDDEN_TAGS:
+            continue
         info = TAG_DISPLAY.get(tag_name, {"display_name": tag_name.capitalize(), "emoji": "📁"})
         result.append(TagOut(
             name=tag_name,

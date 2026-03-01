@@ -4,7 +4,7 @@ import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { api, ApiError } from "../api";
 import { haptic } from "../telegram";
-import type { Gender, AspectRatio, PostDetail } from "../types";
+import type { AspectRatio, PostDetail } from "../types";
 import {
   ArrowLeft, Sparkles, Square, Monitor, Smartphone,
   Plus, HelpCircle, Image, Coins, X, Loader2,
@@ -34,12 +34,6 @@ const MODELS: ModelDef[] = [
   { id: "grok", name: "Grok Imagine", desc: "xAI модель", price: "9 ткн", priceNum: 9, type: "text2img", formats: ALL_FORMATS },
 ];
 
-const GENDERS: { key: Gender; label: string }[] = [
-  { key: "male", label: "Мужское" },
-  { key: "female", label: "Женское" },
-  { key: "unisex", label: "Унисекс" },
-];
-
 const ASPECTS: { key: AspectRatio; label: string; icon: typeof Square }[] = [
   { key: "1:1", label: "1:1", icon: Square },
   { key: "16:9", label: "16:9", icon: Monitor },
@@ -61,7 +55,6 @@ export default function GeneratePage() {
 
   const isStandalone = !postId;
 
-  const [gender, setGender] = useState<Gender>("male");
   const [prompt, setPrompt] = useState("");
   const [aspect, setAspect] = useState<AspectRatio>("1:1");
   const [model, setModel] = useState("nano_banana");
@@ -188,28 +181,6 @@ export default function GeneratePage() {
   );
 
   /* ─── Shared section builders ─── */
-
-  const genderSelector = (
-    <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
-      {GENDERS.map((g) => {
-        const active = gender === g.key;
-        return (
-          <button key={g.key} onClick={() => { haptic(); setGender(g.key); }}
-            style={{
-              flex: 1, height: 36, borderRadius: 12, display: "flex",
-              alignItems: "center", justifyContent: "center",
-              background: active ? "#C4F82A" : "#18181B",
-              border: active ? "none" : "1px solid #27272A",
-              color: active ? "#0A0A0A" : "#A1A1AA",
-              fontFamily: "var(--font-body)", fontSize: 13,
-              fontWeight: active ? 600 : 500, transition: "all 0.2s",
-            }}>
-            {g.label}
-          </button>
-        );
-      })}
-    </div>
-  );
 
   const promptModeSection = !isStandalone ? (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -526,7 +497,6 @@ export default function GeneratePage() {
           flex: 1, overflowY: "auto", padding: "16px 20px",
           display: "flex", flexDirection: "column", gap: 20,
         }}>
-          {genderSelector}
           {promptModeSection}
           {promptSection}
           {refsSection}

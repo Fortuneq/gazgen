@@ -79,7 +79,6 @@ export interface UserProfile {
   video_credits: number;
 }
 
-export type Gender = "male" | "female" | "unisex";
 export type PromptMode = "original" | "custom";
 export type AspectRatio = "1:1" | "16:9" | "9:16";
 export type AnimeDuration = "3" | "5" | "10" | "15";

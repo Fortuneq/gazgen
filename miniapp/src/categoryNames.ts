@@ -1,7 +1,5 @@
 /** Maps tag names to human-readable Russian display names */
 const TAG_DISPLAY: Record<string, string> = {
-  male: "Мужское",
-  female: "Женское",
   couple: "Пары",
   group: "Группа",
   landscape: "Пейзажи",
