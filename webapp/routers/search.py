@@ -1,14 +1,15 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from webapp.db import get_pool
 from webapp.config import get_category_emoji
 from webapp.models import SearchRequest, SearchResultOut
 from webapp.services.embedding import encode_query
+from webapp.auth import get_current_user
 
 router = APIRouter()
 
 
 @router.post("/search", response_model=list[SearchResultOut])
-async def search_posts(req: SearchRequest):
+async def search_posts(req: SearchRequest, user: dict = Depends(get_current_user)):
     embedding = encode_query(req.query)
     pool = get_pool()
 

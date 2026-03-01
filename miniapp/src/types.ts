@@ -4,6 +4,13 @@ export interface Category {
   post_count: number;
 }
 
+export interface Tag {
+  name: string;
+  display_name: string;
+  emoji: string;
+  post_count: number;
+}
+
 export interface Post {
   id: number;
   publication_id: string;
@@ -25,60 +32,49 @@ export interface ImageMeta {
   height: number | null;
 }
 
-export interface SearchResult extends Post {
-  similarity: number;
-}
-
-export type ModelTier = 'nano' | 'standard' | 'pro' | 'ultra';
-
-export interface GenerateRequest {
-  post_id: number;
-  prompt_mode: 'original' | 'custom' | 'adapted';
-  custom_prompt?: string;
-  aspect_ratio?: string;
-  use_references?: boolean;
-  model?: ModelTier;
-}
-
-export interface GenerateStatus {
-  task_id: string;
-  status: 'pending' | 'processing' | 'success' | 'failed';
-  result_url?: string;
-  error?: string;
-}
-
-export interface PaginatedResponse<T> {
-  items: T[];
+export interface PaginatedPosts {
+  items: Post[];
   total: number;
   page: number;
   limit: number;
   has_more: boolean;
 }
 
-export interface UserProfile {
-  id: number;
-  username: string;
-  firstName: string;
-  lastName: string;
-  photoUrl: string;
-  credits: number;
+export interface SearchResult extends Post {
+  similarity: number;
 }
 
-export interface PricingPack {
-  id: string;
-  name: string;
-  count: number;
-  price: number;
-  pricePerUnit: number;
-  popular?: boolean;
+export interface GenerateRequest {
+  post_id: number;
+  prompt_mode: "original" | "custom" | "adapted";
+  custom_prompt?: string;
+  aspect_ratio: string;
+  use_references: boolean;
+  model?: string;
 }
 
-export interface ModelInfo {
-  id: ModelTier;
-  name: string;
-  description: string;
-  creditsPerPhoto: number;
-  creditsPerVideo: number;
-  photoPacks: PricingPack[];
-  videoPacks: PricingPack[];
+export interface DirectGenerateRequest {
+  prompt: string;
+  model: string;
+  aspect_ratio: string;
+  reference_urls: string[];
 }
+
+export interface GenerateResponse {
+  task_id: string;
+}
+
+export interface GenerateStatus {
+  task_id: string;
+  status: "pending" | "processing" | "success" | "completed" | "failed";
+  result_url?: string;
+  error?: string;
+}
+
+export type Gender = "male" | "female" | "unisex";
+export type PromptMode = "original" | "custom";
+export type AspectRatio = "1:1" | "16:9" | "9:16";
+export type AnimeDuration = "3" | "5" | "10" | "15";
+export type AnimateModel = "kling2.6" | "kling3.0" | "veo";
+export type ViewFilter = "all" | "photo" | "video";
+export type FeedFilter = "all" | "popular" | "new";

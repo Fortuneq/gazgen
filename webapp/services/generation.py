@@ -26,6 +26,62 @@ CATEGORY_TO_MODEL = {
     "nano_melon": "seedream/4.5-text-to-image",
     "nano_orange": "seedream/4.5-text-to-image",
     "nano_pineapple": "seedream/4.5-text-to-image",
+    # Frontend model ids
+    "nano": "nano-banana-pro",
+    "flux": "flux-schnell",
+    "nano-pro": "nano-banana-pro",
+    "sd": "stable-diffusion-xl",
+    "sora": "sora",
+    "imagen": "imagen-4",
+    "seedream": "seedream/4.5-text-to-image",
+}
+
+# Direct generation model keys → KIE model IDs + payload config
+DIRECT_MODELS: dict[str, dict] = {
+    "seedream": {
+        "model_id": "seedream/4.5-text-to-image",
+        "extra": {"quality": "basic"},
+    },
+    "seedream_v4": {
+        "model_id": "bytedance/seedream-v4-text-to-image",
+        "extra": {},
+        "use_image_size": True,
+    },
+    "banana": {
+        "model_id": "nano-banana-pro",
+        "extra": {"resolution": "1K", "output_format": "png"},
+    },
+    "nano_banana": {
+        "model_id": "google/nano-banana",
+        "extra": {"resolution": "1K", "output_format": "png"},
+    },
+    "gpt_text": {
+        "model_id": "gpt-image/1.5-text-to-image",
+        "extra": {},
+    },
+    "gpt_img2img": {
+        "model_id": "gpt-image/1.5-image-to-image",
+        "extra": {},
+    },
+    "gpt4o": {
+        "model_id": "gpt-image-1",
+        "extra": {},
+    },
+    "qwen": {
+        "model_id": "qwen/text-to-image",
+        "extra": {},
+        "use_image_size": True,
+    },
+    "grok": {
+        "model_id": "grok-imagine/text-to-image",
+        "extra": {},
+    },
+}
+
+ASPECT_TO_SIZE = {
+    "1:1": "1024x1024",
+    "16:9": "1024x576",
+    "9:16": "576x1024",
 }
 
 
@@ -71,6 +127,42 @@ async def create_generation_task(
         input_data["output_format"] = "png"
     elif "seedream" in model_id.lower():
         input_data["quality"] = "basic"
+
+    payload = {"model": model_id, "input": input_data}
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{KIE_BASE_URL}/createTask", json=payload, headers=headers
+        ) as resp:
+            data = await resp.json()
+
+    if data.get("code") != 200:
+        raise RuntimeError(f"kie.ai createTask error: {data.get('msg')} (code {data.get('code')})")
+    return data["data"]["taskId"]
+
+
+async def create_generation_task_v2(
+    model_key: str, prompt: str, reference_urls: list[str], aspect_ratio: str = "1:1"
+) -> str:
+    """Create a generation task using a direct model key (from DIRECT_MODELS)."""
+    cfg = DIRECT_MODELS.get(model_key)
+    if not cfg:
+        raise RuntimeError(f"Unknown model key: {model_key}")
+
+    model_id = cfg["model_id"]
+    headers = {
+        "Authorization": f"Bearer {KIE_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    input_data: dict = {"prompt": prompt, "aspect_ratio": aspect_ratio}
+    if reference_urls:
+        input_data["input_urls"] = reference_urls
+
+    # Apply model-specific fields
+    input_data.update(cfg.get("extra", {}))
+    if cfg.get("use_image_size"):
+        input_data["image_size"] = ASPECT_TO_SIZE.get(aspect_ratio, "1024x1024")
 
     payload = {"model": model_id, "input": input_data}
 

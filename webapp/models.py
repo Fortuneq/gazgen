@@ -46,12 +46,31 @@ class SearchResultOut(PostOut):
     similarity: float
 
 
+class TagOut(BaseModel):
+    name: str
+    display_name: str
+    emoji: str
+    post_count: int
+
+
 class GenerateRequest(BaseModel):
     post_id: int
     prompt_mode: str = "original"
     custom_prompt: Optional[str] = None
     aspect_ratio: str = "1:1"
     use_references: bool = True
+    model: Optional[str] = None
+
+
+class DirectGenerateRequest(BaseModel):
+    prompt: str
+    model: str
+    aspect_ratio: str = "1:1"
+    reference_urls: list[str] = []
+
+
+class UploadReferenceResponse(BaseModel):
+    url: str
 
 
 class GenerateResponse(BaseModel):

@@ -1,52 +1,65 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import Layout from './components/Layout'
-import ExplorePage from './pages/ExplorePage'
-import DetailPage from './pages/DetailPage'
-import SearchPage from './pages/SearchPage'
-import GeneratePage from './pages/GeneratePage'
+import { Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
 
-const AnimatePage = lazy(() => import('./pages/AnimatePage'))
-const PricingPage = lazy(() => import('./pages/PricingPage'))
-const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const HomePage = lazy(() => import("./pages/HomePage"));
+const CreateHubPage = lazy(() => import("./pages/CreateHubPage"));
+const GeneratePage = lazy(() => import("./pages/GeneratePage"));
+const CreateVideoPage = lazy(() => import("./pages/CreateVideoPage"));
+const PostDetailPage = lazy(() => import("./pages/PostDetailPage"));
+const LoadingPage = lazy(() => import("./pages/LoadingPage"));
+const ResultPage = lazy(() => import("./pages/ResultPage"));
+const AnimatePage = lazy(() => import("./pages/AnimatePage"));
+const AnimatePromptPage = lazy(() => import("./pages/AnimatePromptPage"));
+const PricingPage = lazy(() => import("./pages/PricingPage"));
+const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const PhotoDetailPage = lazy(() => import("./pages/PhotoDetailPage"));
+const CategoryFeedPage = lazy(() => import("./pages/CategoryFeedPage"));
+const CategoriesPage = lazy(() => import("./pages/CategoriesPage"));
+const ReelsPage = lazy(() => import("./pages/ReelsPage"));
+const ReelsTemplatePage = lazy(() => import("./pages/ReelsTemplatePage"));
 
-const loadingFallback = (
-  <div style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    minBlockSize: '100dvh',
-  }}>
-    <div style={{
-      width: 32,
-      height: 32,
-      borderRadius: '50%',
-      border: '3px solid var(--border)',
-      borderTopColor: 'var(--accent)',
-      animation: 'spin 0.7s linear infinite',
-    }} />
-    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-  </div>
-)
-
-export default function App() {
+function LoadingFallback() {
   return (
-    <BrowserRouter>
-      <Layout>
-        <Suspense fallback={loadingFallback}>
-          <Routes>
-            <Route path="/" element={<ExplorePage />} />
-            <Route path="/post/:id" element={<DetailPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/generate" element={<GeneratePage />} />
-            <Route path="/generate/:postId" element={<GeneratePage />} />
-            <Route path="/animate" element={<AnimatePage />} />
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-          </Routes>
-        </Suspense>
-      </Layout>
-    </BrowserRouter>
-  )
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      height: "100vh", background: "var(--bg)",
+    }}>
+      <div className="animate-spin" style={{
+        width: 40, height: 40, border: "3px solid #27272A",
+        borderTopColor: "#C4F82A", borderRadius: "50%",
+      }} />
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/create" element={<CreateHubPage />} />
+        <Route path="/create/photo" element={<GeneratePage />} />
+        <Route path="/create/photo/:postId" element={<GeneratePage />} />
+        <Route path="/create/video" element={<CreateVideoPage />} />
+        <Route path="/create/reels" element={<ReelsPage />} />
+        <Route path="/create/animate" element={<AnimatePage />} />
+        <Route path="/generate" element={<GeneratePage />} />
+        <Route path="/generate/:postId" element={<GeneratePage />} />
+        <Route path="/post/:postId" element={<PostDetailPage />} />
+        <Route path="/loading/:taskId" element={<LoadingPage />} />
+        <Route path="/result/:taskId" element={<ResultPage />} />
+        <Route path="/animate" element={<AnimatePage />} />
+        <Route path="/animate/prompt" element={<AnimatePromptPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/subscription" element={<SubscriptionPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/photo/:postId" element={<PhotoDetailPage />} />
+        <Route path="/category/:name" element={<CategoryFeedPage />} />
+        <Route path="/categories" element={<CategoriesPage />} />
+        <Route path="/reels" element={<ReelsPage />} />
+        <Route path="/reels/:templateId" element={<ReelsTemplatePage />} />
+      </Routes>
+    </Suspense>
+  );
 }

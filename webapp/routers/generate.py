@@ -1,22 +1,30 @@
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from webapp.db import get_pool
-from webapp.models import GenerateRequest, GenerateResponse, GenerateStatusOut
+from webapp.models import (
+    GenerateRequest,
+    GenerateResponse,
+    GenerateStatusOut,
+    DirectGenerateRequest,
+    UploadReferenceResponse,
+)
 from webapp.services.generation import (
     get_model_id,
     upload_image_to_imgbb,
     create_generation_task,
+    create_generation_task_v2,
     poll_task_status,
 )
 from webapp.services.ai_agent import generate_adapted_prompt
+from webapp.auth import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.post("/generate", response_model=GenerateResponse)
-async def start_generation(req: GenerateRequest):
+async def start_generation(req: GenerateRequest, user: dict = Depends(get_current_user)):
     pool = get_pool()
 
     row = await pool.fetchrow(
@@ -52,12 +60,43 @@ async def start_generation(req: GenerateRequest):
                 reference_urls.append(url)
 
     model_id = get_model_id(category)
+    if req.model:
+        model_id = req.model
     task_id = await create_generation_task(
         model_id, prompt, reference_urls, req.aspect_ratio
     )
     logger.info("Created generation task %s for model %s", task_id, model_id)
 
     return GenerateResponse(task_id=task_id)
+
+
+@router.post("/generate/direct", response_model=GenerateResponse)
+async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depends(get_current_user)):
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required")
+
+    try:
+        task_id = await create_generation_task_v2(
+            req.model, req.prompt, req.reference_urls, req.aspect_ratio
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.info("Created direct generation task %s for model key %s", task_id, req.model)
+    return GenerateResponse(task_id=task_id)
+
+
+@router.post("/upload-reference", response_model=UploadReferenceResponse)
+async def upload_reference(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 10MB)")
+
+    url = await upload_image_to_imgbb(contents)
+    if not url:
+        raise HTTPException(status_code=500, detail="Failed to upload image")
+
+    return UploadReferenceResponse(url=url)
 
 
 @router.get("/generate/{task_id}/status", response_model=GenerateStatusOut)

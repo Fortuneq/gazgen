@@ -1,131 +1,91 @@
-import type { Category, Post, PostDetail, SearchResult, GenerateRequest, GenerateStatus, PaginatedResponse, UserProfile, ModelInfo } from './types';
-import { tg } from './telegram';
+import { getInitData } from "./telegram";
 
-const BASE = '/api';
+const BASE = "/api";
 
-async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const initData = getInitData();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (initData) {
+    headers["Authorization"] = `tma ${initData}`;
+  }
+  const res = await fetch(`${BASE}${url}`, {
+    headers,
+    ...options,
+  });
+  if (!res.ok) throw new Error(`API Error: ${res.status}`);
   return res.json();
 }
 
-export async function getCategories(): Promise<Category[]> {
-  return fetchJSON(`${BASE}/categories`);
-}
-
-export async function getPosts(category?: string, page = 1, limit = 20): Promise<PaginatedResponse<Post>> {
-  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-  if (category) params.set('category', category);
-  return fetchJSON(`${BASE}/posts?${params}`);
-}
-
-export async function getPost(id: number): Promise<PostDetail> {
-  return fetchJSON(`${BASE}/posts/${id}`);
-}
-
-export function getImageUrl(postId: number): string {
-  return `${BASE}/images/${postId}/result`;
-}
-
-export function getReferenceUrl(postId: number, order: number): string {
-  return `${BASE}/images/${postId}/reference/${order}`;
-}
-
-export async function searchPosts(query: string, limit = 20): Promise<SearchResult[]> {
-  return fetchJSON(`${BASE}/search`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, limit }),
-  });
-}
-
-export async function startGeneration(req: GenerateRequest): Promise<{ task_id: string }> {
-  return fetchJSON(`${BASE}/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req),
-  });
-}
-
-export async function getGenerationStatus(taskId: string): Promise<GenerateStatus> {
-  return fetchJSON(`${BASE}/generate/${taskId}/status`);
-}
-
-export function getUserProfile(): UserProfile {
-  const user = tg?.initDataUnsafe?.user as Record<string, unknown> | undefined;
-  return {
-    id: (user?.id as number) ?? 0,
-    username: (user?.username as string) ?? 'user',
-    firstName: (user?.first_name as string) ?? 'User',
-    lastName: (user?.last_name as string) ?? '',
-    photoUrl: (user?.photo_url as string) ?? '',
-    credits: 100,
-  };
-}
-
-export const MODEL_DATA: ModelInfo[] = [
-  {
-    id: 'nano',
-    name: 'Nano',
-    description: 'Быстрая генерация, базовое качество',
-    creditsPerPhoto: 1,
-    creditsPerVideo: 5,
-    photoPacks: [
-      { id: 'nano-10', name: '10 фото', count: 10, price: 49, pricePerUnit: 4.9 },
-      { id: 'nano-50', name: '50 фото', count: 50, price: 199, pricePerUnit: 3.98, popular: true },
-      { id: 'nano-100', name: '100 фото', count: 100, price: 349, pricePerUnit: 3.49 },
-    ],
-    videoPacks: [
-      { id: 'nano-v5', name: '5 видео', count: 5, price: 149, pricePerUnit: 29.8 },
-      { id: 'nano-v20', name: '20 видео', count: 20, price: 449, pricePerUnit: 22.45 },
-    ],
+export const api = {
+  // Posts
+  getPosts: (params?: { category?: string; tag?: string; page?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.category) sp.set("category", params.category);
+    if (params?.tag) sp.set("tag", params.tag);
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    const q = sp.toString();
+    return request<import("./types").PaginatedPosts>(`/posts${q ? "?" + q : ""}`);
   },
-  {
-    id: 'standard',
-    name: 'Standard',
-    description: 'Оптимальный баланс скорости и качества',
-    creditsPerPhoto: 2,
-    creditsPerVideo: 10,
-    photoPacks: [
-      { id: 'std-10', name: '10 фото', count: 10, price: 99, pricePerUnit: 9.9 },
-      { id: 'std-50', name: '50 фото', count: 50, price: 399, pricePerUnit: 7.98, popular: true },
-      { id: 'std-100', name: '100 фото', count: 100, price: 699, pricePerUnit: 6.99 },
-    ],
-    videoPacks: [
-      { id: 'std-v5', name: '5 видео', count: 5, price: 299, pricePerUnit: 59.8 },
-      { id: 'std-v20', name: '20 видео', count: 20, price: 899, pricePerUnit: 44.95 },
-    ],
+  getPost: (id: number) =>
+    request<import("./types").PostDetail>(`/posts/${id}`),
+
+  // Categories
+  getCategories: () =>
+    request<import("./types").Category[]>("/categories"),
+  getCategoryCoverUrl: (categoryName: string) =>
+    `${BASE}/categories/${encodeURIComponent(categoryName)}/cover`,
+
+  // Tags
+  getTags: () =>
+    request<import("./types").Tag[]>("/tags"),
+  getTagCoverUrl: (tagName: string) =>
+    `${BASE}/tags/${encodeURIComponent(tagName)}/cover`,
+
+  // Images
+  getResultImageUrl: (postId: number) => `${BASE}/images/${postId}/result`,
+  getReferenceImageUrl: (postId: number, order: number) =>
+    `${BASE}/images/${postId}/reference/${order}`,
+
+  // Search
+  search: (query: string, limit = 10) =>
+    request<import("./types").SearchResult[]>("/search", {
+      method: "POST",
+      body: JSON.stringify({ query, limit }),
+    }),
+
+  // Generate
+  startGeneration: (data: import("./types").GenerateRequest) =>
+    request<import("./types").GenerateResponse>("/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  startDirectGeneration: (data: import("./types").DirectGenerateRequest) =>
+    request<import("./types").GenerateResponse>("/generate/direct", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  uploadReference: async (file: File): Promise<{ url: string }> => {
+    const initData = getInitData();
+    const formData = new FormData();
+    formData.append("file", file);
+    const headers: Record<string, string> = {};
+    if (initData) {
+      headers["Authorization"] = `tma ${initData}`;
+    }
+    const res = await fetch(`${BASE}/upload-reference`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    return res.json();
   },
-  {
-    id: 'pro',
-    name: 'Pro',
-    description: 'Высокое качество, детализация',
-    creditsPerPhoto: 5,
-    creditsPerVideo: 25,
-    photoPacks: [
-      { id: 'pro-10', name: '10 фото', count: 10, price: 249, pricePerUnit: 24.9 },
-      { id: 'pro-50', name: '50 фото', count: 50, price: 999, pricePerUnit: 19.98, popular: true },
-      { id: 'pro-100', name: '100 фото', count: 100, price: 1749, pricePerUnit: 17.49 },
-    ],
-    videoPacks: [
-      { id: 'pro-v5', name: '5 видео', count: 5, price: 749, pricePerUnit: 149.8 },
-      { id: 'pro-v20', name: '20 видео', count: 20, price: 2249, pricePerUnit: 112.45 },
-    ],
-  },
-  {
-    id: 'ultra',
-    name: 'Ultra',
-    description: 'Максимальное качество, фотореализм',
-    creditsPerPhoto: 10,
-    creditsPerVideo: 50,
-    photoPacks: [
-      { id: 'ultra-10', name: '10 фото', count: 10, price: 499, pricePerUnit: 49.9 },
-      { id: 'ultra-50', name: '50 фото', count: 50, price: 1999, pricePerUnit: 39.98, popular: true },
-      { id: 'ultra-100', name: '100 фото', count: 100, price: 3499, pricePerUnit: 34.99 },
-    ],
-    videoPacks: [
-      { id: 'ultra-v5', name: '5 видео', count: 5, price: 1499, pricePerUnit: 299.8 },
-      { id: 'ultra-v20', name: '20 видео', count: 20, price: 4499, pricePerUnit: 224.95 },
-    ],
-  },
-];
+  getGenerationStatus: (taskId: string) =>
+    request<import("./types").GenerateStatus>(`/generate/${taskId}/status`),
+
+  // Health
+  health: () => request<{ status: string }>("/health"),
+};

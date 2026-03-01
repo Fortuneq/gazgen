@@ -12,6 +12,33 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function() {
+        var db = document.createElement('div');
+        db.id = 'debug-banner';
+        db.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#C4F82A;color:#000;padding:8px 12px;font-size:11px;font-family:monospace;word-break:break-all;';
+        document.body.prepend(db);
+        var tg = window.Telegram && window.Telegram.WebApp;
+        db.textContent = 'TG=' + !!tg +
+          ' initData=' + (tg ? tg.initData.length : 'N/A') +
+          ' plat=' + (tg ? tg.platform : 'N/A') +
+          ' vh=' + window.innerHeight;
+        setTimeout(function() {
+          var root = document.getElementById('root');
+          db.textContent += ' | children=' + root.childElementCount + ' html=' + root.innerHTML.length;
+        }, 3000);
+        window.onerror = function(msg, src, line, col, err) {
+          db.style.background = '#EF4444';
+          db.style.color = '#FFF';
+          db.textContent = 'ERR: ' + msg + ' @ ' + src + ':' + line;
+        };
+        window.addEventListener('unhandledrejection', function(e) {
+          db.style.background = '#EF4444';
+          db.style.color = '#FFF';
+          db.textContent = 'REJECT: ' + (e.reason && e.reason.message || e.reason);
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

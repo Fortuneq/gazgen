@@ -1,1043 +1,754 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import type { PostDetail, GenerateRequest, ModelTier } from '../types'
-import { getPost, getImageUrl, startGeneration, getGenerationStatus } from '../api'
-import { MODEL_DATA } from '../api'
-import { tg, haptic, hapticSuccess, hapticError } from '../telegram'
-import { useIsDesktop } from '../hooks/useMediaQuery'
-import { Sparkles, Download, RotateCcw } from 'lucide-react'
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Layout } from "../components/Layout";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { api } from "../api";
+import { haptic } from "../telegram";
+import type { Gender, AspectRatio, PostDetail } from "../types";
+import {
+  ArrowLeft, Sparkles, Square, Monitor, Smartphone,
+  Plus, HelpCircle, Image, Coins, X, Loader2,
+} from "lucide-react";
 
-type PromptMode = 'original' | 'custom' | 'adapted'
-type PageState = 'form' | 'generating' | 'result'
+interface ModelDef {
+  id: string;
+  name: string;
+  desc: string;
+  price: string;
+  priceNum: number;
+  type: "text2img" | "img2img" | "text/img2img";
+  formats: AspectRatio[];
+}
 
-const ACCENT = '#C4F82A'
-const SURFACE = '#18181B'
-const BORDER = '#27272A'
-const BG = '#0A0A0A'
-const TEXT = '#FFFFFF'
-const TEXT_SEC = '#A1A1AA'
-const TEXT_TER = '#52525B'
+const ALL_FORMATS: AspectRatio[] = ["1:1", "16:9", "9:16"];
 
-const ASPECT_RATIOS: { label: string; value: string; w: number; h: number }[] = [
-  { label: '1:1', value: '1:1', w: 1, h: 1 },
-  { label: '16:9', value: '16:9', w: 16, h: 9 },
-  { label: '9:16', value: '9:16', w: 9, h: 16 },
-]
+const MODELS: ModelDef[] = [
+  { id: "nano_banana", name: "Nano Banana", desc: "Быстрая генерация, базовое качество", price: "1 кр", priceNum: 1, type: "text2img", formats: ALL_FORMATS },
+  { id: "banana", name: "Nano Banana Pro", desc: "Улучшенное качество", price: "2 кр", priceNum: 2, type: "text2img", formats: ALL_FORMATS },
+  { id: "seedream", name: "Seedream 4.5", desc: "Реалистичные фото", price: "2 кр", priceNum: 2, type: "text2img", formats: ALL_FORMATS },
+  { id: "seedream_v4", name: "Seedream V4", desc: "Новое поколение", price: "2 кр", priceNum: 2, type: "text2img", formats: ALL_FORMATS },
+  { id: "gpt_text", name: "GPT Image", desc: "OpenAI text-to-image", price: "3 кр", priceNum: 3, type: "text2img", formats: ALL_FORMATS },
+  { id: "gpt_img2img", name: "GPT Img2Img", desc: "OpenAI image-to-image", price: "4 кр", priceNum: 4, type: "img2img", formats: ALL_FORMATS },
+  { id: "gpt4o", name: "GPT-4o", desc: "GPT-4o нативная генерация", price: "5 кр", priceNum: 5, type: "text/img2img", formats: ALL_FORMATS },
+  { id: "qwen", name: "Qwen", desc: "Alibaba модель", price: "3 кр", priceNum: 3, type: "text2img", formats: ALL_FORMATS },
+  { id: "grok", name: "Grok Imagine", desc: "xAI модель", price: "3 кр", priceNum: 3, type: "text2img", formats: ALL_FORMATS },
+];
+
+const GENDERS: { key: Gender; label: string }[] = [
+  { key: "male", label: "Мужское" },
+  { key: "female", label: "Женское" },
+  { key: "unisex", label: "Унисекс" },
+];
+
+const ASPECTS: { key: AspectRatio; label: string; icon: typeof Square }[] = [
+  { key: "1:1", label: "1:1", icon: Square },
+  { key: "16:9", label: "16:9", icon: Monitor },
+  { key: "9:16", label: "9:16", icon: Smartphone },
+];
+
+interface UploadedRef {
+  url: string;        // server URL (empty while uploading)
+  preview: string;    // local blob URL for display
+  uploading?: boolean;
+  error?: boolean;
+}
 
 export default function GeneratePage() {
-  const { postId } = useParams<{ postId: string }>()
-  const navigate = useNavigate()
-  const isDesktop = useIsDesktop()
+  const { postId } = useParams<{ postId?: string }>();
+  const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [post, setPost] = useState<PostDetail | null>(null)
-  const [loadingPost, setLoadingPost] = useState(false)
+  const isStandalone = !postId;
 
-  const [pageState, setPageState] = useState<PageState>('form')
-  const [promptMode, setPromptMode] = useState<PromptMode>('original')
-  const [customPrompt, setCustomPrompt] = useState('')
-  const [useReferences, setUseReferences] = useState(true)
-  const [aspectRatio, setAspectRatio] = useState('1:1')
-  const [selectedModel, setSelectedModel] = useState<ModelTier>('standard')
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [resultUrl, setResultUrl] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [textareaFocused, setTextareaFocused] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [gender, setGender] = useState<Gender>("male");
+  const [prompt, setPrompt] = useState("");
+  const [aspect, setAspect] = useState<AspectRatio>("1:1");
+  const [model, setModel] = useState("nano_banana");
+  const [post, setPost] = useState<PostDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showRefTooltip, setShowRefTooltip] = useState(false);
 
-  const hasValidPostId = !!postId && postId !== '0'
+  // Standalone mode: uploaded references
+  const [uploadedRefs, setUploadedRefs] = useState<UploadedRef[]>([]);
 
-  useEffect(() => {
-    if (!hasValidPostId) return
-    setLoadingPost(true)
-    getPost(Number(postId))
-      .then((p) => {
-        setPost(p)
-        setCustomPrompt(p.prompt || '')
-      })
-      .catch(console.error)
-      .finally(() => setLoadingPost(false))
-  }, [postId, hasValidPostId])
+  // Post mode: use references toggle
+  const [useRefs, setUseRefs] = useState(true);
+  const [promptMode, setPromptMode] = useState<"original" | "custom">("original");
 
   useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+    if (postId) {
+      api.getPost(Number(postId)).then((p) => {
+        setPost(p);
+        if (p.prompt) setPrompt(p.prompt);
+      });
     }
-  }, [])
+  }, [postId]);
 
-  const goBack = useCallback(() => {
-    if (pageState === 'result') {
-      navigate('/')
-    } else {
-      navigate(-1)
-    }
-  }, [pageState, navigate])
+  const selectedModel = MODELS.find((m) => m.id === model)!;
+  const availableFormats = selectedModel.formats;
 
+  // Reset aspect ratio if current model doesn't support it
   useEffect(() => {
-    if (!tg) return
-    if (pageState === 'generating') {
-      tg.BackButton.hide()
-    } else {
-      tg.BackButton.show()
-      tg.BackButton.onClick(goBack)
+    if (!availableFormats.includes(aspect)) {
+      setAspect(availableFormats[0]);
     }
-    return () => {
-      if (tg) tg.BackButton.offClick(goBack)
-    }
-  }, [goBack, pageState])
+  }, [model, availableFormats, aspect]);
+  const charLimit = 999;
 
-  const handleGenerate = async () => {
-    haptic('heavy')
-    setPageState('generating')
-    setError(null)
+  async function handleUploadRef() {
+    fileInputRef.current?.click();
+  }
 
-    const req: GenerateRequest = {
-      post_id: post ? post.id : 0,
-      prompt_mode: promptMode,
-      aspect_ratio: aspectRatio,
-      use_references: useReferences,
-      model: selectedModel,
-    }
-    if (promptMode === 'custom' || promptMode === 'adapted') {
-      req.custom_prompt = customPrompt
-    }
+  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || uploadedRefs.length >= 3) return;
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    const preview = URL.createObjectURL(file);
+    const idx = uploadedRefs.length;
+
+    // Show preview immediately with uploading state
+    setUploadedRefs((prev) => [...prev, { url: "", preview, uploading: true }]);
 
     try {
-      const { task_id } = await startGeneration(req)
-      setTaskId(task_id)
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await getGenerationStatus(task_id)
-          if (status.status === 'success' && status.result_url) {
-            if (pollRef.current) clearInterval(pollRef.current)
-            setResultUrl(status.result_url)
-            setPageState('result')
-            hapticSuccess()
-          } else if (status.status === 'failed') {
-            if (pollRef.current) clearInterval(pollRef.current)
-            setError(status.error || 'Ошибка генерации')
-            setPageState('form')
-            hapticError()
-          }
-        } catch {
-          if (pollRef.current) clearInterval(pollRef.current)
-          setError('Потеряно соединение')
-          setPageState('form')
-          hapticError()
-        }
-      }, 3000)
+      const { url } = await api.uploadReference(file);
+      setUploadedRefs((prev) =>
+        prev.map((r, i) => (i === idx ? { ...r, url, uploading: false } : r))
+      );
     } catch {
-      setError('Не удалось запустить генерацию')
-      setPageState('form')
-      hapticError()
+      // Upload failed — keep preview but mark as local-only
+      setUploadedRefs((prev) =>
+        prev.map((r, i) => (i === idx ? { ...r, url: preview, uploading: false, error: true } : r))
+      );
     }
   }
 
-  const handleReset = () => {
-    haptic('medium')
-    setPageState('form')
-    setResultUrl(null)
-    setTaskId(null)
-    setError(null)
+  function removeRef(idx: number) {
+    setUploadedRefs((prev) => {
+      const next = [...prev];
+      URL.revokeObjectURL(next[idx].preview);
+      next.splice(idx, 1);
+      return next;
+    });
   }
 
-  const isGenerateDisabled =
-    (promptMode === 'custom' || promptMode === 'adapted') && !customPrompt.trim()
-
-  if (pageState === 'generating') {
-    return <GeneratingOverlay taskId={taskId} />
+  async function handleGenerate() {
+    if (loading) return;
+    if (isStandalone && !prompt.trim()) return;
+    haptic("medium");
+    setLoading(true);
+    try {
+      if (isStandalone) {
+        const res = await api.startDirectGeneration({
+          prompt: prompt.trim(),
+          model,
+          aspect_ratio: aspect,
+          reference_urls: uploadedRefs.filter((r) => r.url && !r.uploading).map((r) => r.url),
+        });
+        navigate(`/loading/${res.task_id}`);
+      } else {
+        const res = await api.startGeneration({
+          post_id: post?.id ?? 0,
+          prompt_mode: promptMode,
+          custom_prompt: promptMode === "custom" ? prompt : undefined,
+          aspect_ratio: aspect,
+          use_references: useRefs,
+          model,
+        });
+        navigate(`/loading/${res.task_id}`);
+      }
+    } catch {
+      setLoading(false);
+    }
   }
 
-  if (pageState === 'result' && resultUrl) {
-    return (
-      <ResultView
-        resultUrl={resultUrl}
-        promptMode={promptMode}
-        customPrompt={customPrompt}
-        onReset={handleReset}
-      />
-    )
-  }
+  const canGenerate = isStandalone ? prompt.trim().length > 0 : true;
 
-  if (isDesktop) {
-    return (
-      <div style={s.desktopRoot}>
-        <div style={s.desktopLeft}>
-          <FormContent
-            post={post}
-            loadingPost={loadingPost}
-            promptMode={promptMode}
-            setPromptMode={setPromptMode}
-            customPrompt={customPrompt}
-            setCustomPrompt={setCustomPrompt}
-            useReferences={useReferences}
-            setUseReferences={setUseReferences}
-            aspectRatio={aspectRatio}
-            setAspectRatio={setAspectRatio}
-            selectedModel={selectedModel}
-            setSelectedModel={setSelectedModel}
-            textareaFocused={textareaFocused}
-            setTextareaFocused={setTextareaFocused}
-            error={error}
-            isGenerateDisabled={isGenerateDisabled}
-            onGenerate={handleGenerate}
-          />
-        </div>
-        <div style={s.desktopRight}>
-          <DesktopPreview post={post} loadingPost={loadingPost} />
-        </div>
-      </div>
-    )
-  }
+  /* ─── Hidden file input ─── */
+  const hiddenFileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      onChange={onFileSelected}
+      style={{ display: "none" }}
+    />
+  );
 
-  return (
-    <div style={s.mobileRoot} className="safe-bottom">
-      <FormContent
-        post={post}
-        loadingPost={loadingPost}
-        promptMode={promptMode}
-        setPromptMode={setPromptMode}
-        customPrompt={customPrompt}
-        setCustomPrompt={setCustomPrompt}
-        useReferences={useReferences}
-        setUseReferences={setUseReferences}
-        aspectRatio={aspectRatio}
-        setAspectRatio={setAspectRatio}
-        selectedModel={selectedModel}
-        setSelectedModel={setSelectedModel}
-        textareaFocused={textareaFocused}
-        setTextareaFocused={setTextareaFocused}
-        error={error}
-        isGenerateDisabled={isGenerateDisabled}
-        onGenerate={handleGenerate}
-      />
-    </div>
-  )
-}
+  /* ─── Shared section builders ─── */
 
-// ---- Sub-components ----
-
-interface FormContentProps {
-  post: PostDetail | null
-  loadingPost: boolean
-  promptMode: PromptMode
-  setPromptMode: (m: PromptMode) => void
-  customPrompt: string
-  setCustomPrompt: (v: string) => void
-  useReferences: boolean
-  setUseReferences: (v: boolean) => void
-  aspectRatio: string
-  setAspectRatio: (v: string) => void
-  selectedModel: ModelTier
-  setSelectedModel: (m: ModelTier) => void
-  textareaFocused: boolean
-  setTextareaFocused: (v: boolean) => void
-  error: string | null
-  isGenerateDisabled: boolean
-  onGenerate: () => void
-}
-
-function FormContent({
-  post,
-  loadingPost,
-  promptMode,
-  setPromptMode,
-  customPrompt,
-  setCustomPrompt,
-  useReferences,
-  setUseReferences,
-  aspectRatio,
-  setAspectRatio,
-  selectedModel,
-  setSelectedModel,
-  textareaFocused,
-  setTextareaFocused,
-  error,
-  isGenerateDisabled,
-  onGenerate,
-}: FormContentProps) {
-  return (
-    <div style={s.formScroll}>
-      {/* Header */}
-      <div style={s.header}>
-        <h1 style={s.title}>Создать</h1>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div style={s.errorBanner}>{error}</div>
-      )}
-
-      {/* Post preview */}
-      {loadingPost && (
-        <div style={s.section}>
-          <div style={{ ...s.postCard, justifyContent: 'center', minHeight: 64 }}>
-            <div className="skeleton" style={{ width: 48, height: 48, borderRadius: 8, flexShrink: 0 }} />
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div className="skeleton" style={{ width: 60, height: 12, borderRadius: 4 }} />
-              <div className="skeleton" style={{ width: 120, height: 14, borderRadius: 4 }} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loadingPost && post && (
-        <div style={s.section}>
-          <div style={s.postCard}>
-            <img
-              src={getImageUrl(post.id)}
-              alt=""
-              style={s.postThumb}
-            />
-            <div>
-              <p style={s.postCardLabel}>На основе поста</p>
-              <p style={s.postCardCategory}>{post.category_emoji} {post.category}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Prompt mode tabs */}
-      <div style={s.section}>
-        <p style={s.sectionLabel}>Режим промпта</p>
-        <div style={s.tabRow}>
-          {(['original', 'custom', 'adapted'] as PromptMode[]).map((mode) => {
-            const labels: Record<PromptMode, string> = {
-              original: 'Оригинал',
-              custom: 'Свой',
-              adapted: 'Адаптация',
-            }
-            const isActive = promptMode === mode
-            return (
-              <button
-                key={mode}
-                style={{
-                  ...s.tab,
-                  ...(isActive ? s.tabActive : s.tabInactive),
-                }}
-                onClick={() => { haptic('light'); setPromptMode(mode) }}
-              >
-                {labels[mode]}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Textarea */}
-      {(promptMode === 'custom' || promptMode === 'adapted') && (
-        <div style={s.section}>
-          <textarea
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder={promptMode === 'custom' ? 'Введите свой промпт...' : 'Опишите вашу идею...'}
-            rows={4}
+  const genderSelector = (
+    <div style={{ display: "flex", gap: 8, padding: "8px 0" }}>
+      {GENDERS.map((g) => {
+        const active = gender === g.key;
+        return (
+          <button key={g.key} onClick={() => { haptic(); setGender(g.key); }}
             style={{
-              ...s.textarea,
-              ...(textareaFocused ? s.textareaFocused : {}),
-            }}
-            onFocus={() => setTextareaFocused(true)}
-            onBlur={() => setTextareaFocused(false)}
-          />
-        </div>
-      )}
+              flex: 1, height: 36, borderRadius: 12, display: "flex",
+              alignItems: "center", justifyContent: "center",
+              background: active ? "#C4F82A" : "#18181B",
+              border: active ? "none" : "1px solid #27272A",
+              color: active ? "#0A0A0A" : "#A1A1AA",
+              fontFamily: "var(--font-body)", fontSize: 13,
+              fontWeight: active ? 600 : 500, transition: "all 0.2s",
+            }}>
+            {g.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 
-      {/* References toggle */}
-      {post && post.reference_count > 0 && (
-        <div style={s.section}>
-          <p style={s.sectionLabel}>Референсы</p>
-          <div style={s.refToggleRow}>
-            <button
+  const promptModeSection = !isStandalone ? (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+        Режим промпта
+      </span>
+      <div style={{ display: "flex", gap: 8 }}>
+        {(["original", "custom"] as const).map((m) => {
+          const active = promptMode === m;
+          return (
+            <button key={m} onClick={() => { haptic(); setPromptMode(m); }}
               style={{
-                ...s.refToggleBtn,
-                ...(useReferences ? s.refToggleBtnActive : {}),
-              }}
-              onClick={() => { haptic('light'); setUseReferences(true) }}
-            >
-              Использовать
+                flex: 1, padding: "10px 16px", borderRadius: 12,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: active ? "#C4F82A" : "#18181B",
+                border: active ? "none" : "1px solid #27272A",
+                color: active ? "#0A0A0A" : "#A1A1AA",
+                fontFamily: "var(--font-body)", fontSize: 13,
+                fontWeight: active ? 600 : 500, transition: "all 0.2s",
+              }}>
+              {m === "original" ? "Original" : "Custom"}
             </button>
-            <button
-              style={{
-                ...s.refToggleBtn,
-                ...(!useReferences ? s.refToggleBtnActive : {}),
-              }}
-              onClick={() => { haptic('light'); setUseReferences(false) }}
-            >
-              Без референсов
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Aspect ratio */}
-      <div style={s.section}>
-        <p style={s.sectionLabel}>Соотношение сторон</p>
-        <div style={s.ratioRow}>
-          {ASPECT_RATIOS.map((r) => {
-            const isActive = aspectRatio === r.value
-            return (
-              <button
-                key={r.value}
-                style={{
-                  ...s.ratioBtn,
-                  ...(isActive ? s.ratioBtnActive : {}),
-                }}
-                onClick={() => { haptic('light'); setAspectRatio(r.value) }}
-              >
-                <RatioIcon w={r.w} h={r.h} active={isActive} />
-                <span style={{ ...s.ratioLabel, ...(isActive ? { color: ACCENT } : {}) }}>
-                  {r.label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+          );
+        })}
       </div>
+    </div>
+  ) : null;
 
-      {/* Model selector */}
-      <div style={s.section}>
-        <p style={s.sectionLabel}>Модель</p>
-        <div style={s.modelGrid}>
-          {MODEL_DATA.map((m) => {
-            const isActive = selectedModel === m.id
-            return (
-              <button
-                key={m.id}
-                style={{
-                  ...s.modelCard,
-                  ...(isActive ? s.modelCardActive : {}),
-                }}
-                onClick={() => { haptic('light'); setSelectedModel(m.id) }}
-              >
-                <p style={{ ...s.modelName, ...(isActive ? { color: ACCENT } : {}) }}>
-                  {m.name}
-                </p>
-                <p style={s.modelDesc}>{m.description}</p>
-                <p style={{ ...s.modelCost, ...(isActive ? { color: ACCENT } : {}) }}>
-                  {m.creditsPerPhoto} кр/фото
-                </p>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Generate CTA */}
-      <div style={s.ctaSection}>
-        <button
+  const promptSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+        Промпт {isStandalone && <span style={{ color: "#EF4444", fontSize: 14 }}>*</span>}
+      </span>
+      <div style={{
+        borderRadius: 16, background: "#18181B", border: "1px solid #27272A",
+        padding: 16, height: 120, display: "flex", flexDirection: "column",
+      }}>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value.slice(0, charLimit))}
+          placeholder="Красивая пара в элегантных костюмах, кинематографичное освещение, боке на фоне..."
           style={{
-            ...s.generateBtn,
-            ...(isGenerateDisabled ? s.generateBtnDisabled : {}),
+            flex: 1, resize: "none", background: "none", border: "none", outline: "none",
+            color: "#D4D4D8", fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 400,
+            width: "100%", lineHeight: 1.5,
           }}
-          onClick={onGenerate}
-          disabled={isGenerateDisabled}
-        >
-          <Sparkles size={18} color={isGenerateDisabled ? TEXT_TER : '#0A0A0A'} />
-          Создать
+        />
+      </div>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#52525B" }}>
+        {prompt.length} / {charLimit}
+      </span>
+    </div>
+  );
+
+  const refsSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+            Референсы
+          </span>
+          <button onClick={() => setShowRefTooltip(true)}
+            style={{
+              width: 20, height: 20, borderRadius: 100, display: "flex",
+              alignItems: "center", justifyContent: "center",
+              border: "1px solid #52525B", background: "none", padding: 0,
+            }}>
+            <HelpCircle size={12} color="#52525B" />
+          </button>
+        </div>
+        {!isStandalone && (
+          <button onClick={() => { haptic(); setUseRefs(!useRefs); }}
+            style={{
+              padding: "4px 12px", borderRadius: 100,
+              background: useRefs ? "#C4F82A" : "#27272A",
+              color: useRefs ? "#0A0A0A" : "#A1A1AA",
+              fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 600,
+              border: "none", transition: "all 0.2s",
+            }}>
+            {useRefs ? "Использовать" : "Выкл"}
+          </button>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {/* Post-mode: show post references */}
+        {!isStandalone && post && post.references.length > 0 && post.references.slice(0, 2).map((ref) => (
+          <div key={ref.order} style={{
+            width: 80, height: 80, borderRadius: 12, overflow: "hidden",
+            border: "1px solid #27272A",
+          }}>
+            <img src={api.getReferenceImageUrl(post.id, ref.order)} alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
+        ))}
+
+        {/* Standalone mode: show uploaded references */}
+        {isStandalone && uploadedRefs.map((ref, idx) => (
+          <div key={idx} style={{
+            width: 80, height: 80, borderRadius: 12, overflow: "hidden",
+            border: ref.error ? "1px solid #EF4444" : "1px solid #27272A", position: "relative",
+          }}>
+            <img src={ref.preview} alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            {ref.uploading && (
+              <div style={{
+                position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <Loader2 size={20} color="#C4F82A" style={{ animation: "spin 1s linear infinite" }} />
+              </div>
+            )}
+            {!ref.uploading && (
+              <button onClick={() => removeRef(idx)}
+                style={{
+                  position: "absolute", top: 4, right: 4,
+                  width: 20, height: 20, borderRadius: 100,
+                  background: "rgba(0,0,0,0.7)", border: "none",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 0,
+                }}>
+                <X size={12} color="#FFFFFF" />
+              </button>
+            )}
+          </div>
+        ))}
+
+        {/* Add button */}
+        {(isStandalone ? uploadedRefs.length < 3 : true) && (
+          <button
+            onClick={isStandalone ? handleUploadRef : undefined}
+            style={{
+              width: 80, height: 80, borderRadius: 12, background: "#18181B",
+              border: "1px solid #27272A", display: "flex", alignItems: "center",
+              justifyContent: "center",
+            }}>
+            <Plus size={24} color="#52525B" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  const aspectSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+        Формат
+      </span>
+      <div style={{ display: "flex", gap: 8 }}>
+        {ASPECTS.filter((a) => availableFormats.includes(a.key)).map((a) => {
+          const active = aspect === a.key;
+          const Icon = a.icon;
+          return (
+            <button key={a.key} onClick={() => { haptic(); setAspect(a.key); }}
+              style={{
+                flex: 1, padding: "10px 16px", borderRadius: 12, gap: 8,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: active ? "#C4F82A" : "#18181B",
+                border: active ? "none" : "1px solid #27272A",
+                transition: "all 0.2s",
+              }}>
+              <Icon size={16} color={active ? "#0A0A0A" : "#52525B"} />
+              <span style={{
+                fontFamily: "var(--font-body)", fontSize: 13,
+                fontWeight: active ? 600 : 500,
+                color: active ? "#0A0A0A" : "#A1A1AA",
+              }}>
+                {a.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // Build model rows: 2 per row
+  const modelRows: ModelDef[][] = [];
+  for (let i = 0; i < MODELS.length; i += 2) {
+    modelRows.push(MODELS.slice(i, i + 2));
+  }
+
+  const modelSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+        Модель
+      </span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {modelRows.map((row, ri) => (
+          <div key={ri} style={{ display: "flex", gap: 8 }}>
+            {row.map((m) => {
+              const active = model === m.id;
+              return (
+                <button key={m.id} onClick={() => { haptic(); setModel(m.id); }}
+                  style={{
+                    flex: 1, height: 80, borderRadius: 14, padding: "12px 14px",
+                    display: "flex", flexDirection: "column", justifyContent: "center",
+                    gap: 4,
+                    background: active ? "#C4F82A" : "#18181B",
+                    border: active ? "none" : "1px solid #27272A",
+                    textAlign: "left", transition: "all 0.2s",
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                    <span style={{
+                      fontFamily: "var(--font-primary)", fontSize: 13, fontWeight: 700,
+                      color: active ? "#0A0A0A" : "#FFFFFF",
+                    }}>
+                      {m.name}
+                    </span>
+                    <span style={{
+                      fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 600,
+                      color: active ? "rgba(10,10,10,0.5)" : "#71717A",
+                    }}>
+                      {m.price}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 500,
+                    color: active ? "rgba(10,10,10,0.6)" : "#71717A",
+                  }}>
+                    {m.desc}
+                  </span>
+                </button>
+              );
+            })}
+            {row.length === 1 && <div style={{ flex: 1, height: 80 }} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const ctaButton = (
+    <button onClick={handleGenerate} disabled={loading || !canGenerate}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        width: "100%", height: 52, borderRadius: 16, background: "#C4F82A",
+        border: "none", opacity: (loading || !canGenerate) ? 0.5 : 1,
+        transition: "opacity 0.2s",
+      }}>
+      <Sparkles size={20} color="#0A0A0A" />
+      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#0A0A0A" }}>
+        {loading ? "Отправка..." : `Создать — ${selectedModel.priceNum} кредит`}
+      </span>
+    </button>
+  );
+
+  /* ─── Ref Tooltip Overlay ─── */
+  const refTooltipOverlay = showRefTooltip ? (
+    <div onClick={() => setShowRefTooltip(false)}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(10,10,10,0.6)",
+        zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 310, borderRadius: 16, background: "#1E1E1E",
+          border: "1px solid #3F3F46", padding: "16px 18px",
+          display: "flex", flexDirection: "column", gap: 12,
+        }}>
+        <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+          Что такое референсы?
+        </span>
+        <span style={{
+          fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500,
+          color: "#A1A1AA", lineHeight: 1.5,
+        }}>
+          Загрузи 1-3 фото в качестве референса. AI будет использовать их как ориентир для стиля,
+          композиции и настроения при генерации нового изображения.
+          {"\n\n"}Чем точнее референсы — тем ближе результат к желаемому.
+        </span>
+        <button onClick={() => setShowRefTooltip(false)}
+          style={{
+            height: 36, borderRadius: 10, background: "#27272A",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            border: "none",
+          }}>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "#FFFFFF" }}>
+            Понятно
+          </span>
         </button>
       </div>
     </div>
-  )
-}
+  ) : null;
 
-function RatioIcon({ w, h, active }: { w: number; h: number; active: boolean }) {
-  const maxW = 32
-  const maxH = 24
-  const scale = Math.min(maxW / w, maxH / h)
-  const rw = Math.round(w * scale)
-  const rh = Math.round(h * scale)
-  return (
-    <div style={{
-      width: maxW,
-      height: maxH,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <div style={{
-        width: rw,
-        height: rh,
-        borderRadius: 3,
-        border: `2px solid ${active ? ACCENT : BORDER}`,
-        background: active ? `${ACCENT}18` : 'transparent',
-        transition: 'border-color 0.2s ease, background 0.2s ease',
-      }} />
-    </div>
-  )
-}
+  /* ─── Mobile Layout ─── */
+  if (!isDesktop) {
+    return (
+      <Layout title="Создать фото" showBack showTabBar={false} fullScreen>
+        {hiddenFileInput}
 
-function DesktopPreview({ post, loadingPost }: { post: PostDetail | null; loadingPost: boolean }) {
-  return (
-    <div style={s.desktopPreviewWrap}>
-      {loadingPost ? (
-        <div className="skeleton" style={{ width: '100%', height: '100%', borderRadius: 20, minHeight: 400 }} />
-      ) : post ? (
-        <img
-          src={getImageUrl(post.id)}
-          alt=""
-          style={s.desktopPreviewImg}
-        />
-      ) : (
-        <div style={s.desktopPreviewEmpty}>
-          <div style={s.desktopPreviewEmptyIcon}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={TEXT_TER} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-          </div>
-          <p style={s.desktopPreviewHint}>Предпросмотр появится здесь</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function GeneratingOverlay({ taskId }: { taskId: string | null }) {
-  return (
-    <div style={s.genOverlay}>
-      <div style={s.genContent}>
-        {/* Lime spinner */}
-        <svg width="80" height="80" viewBox="0 0 80 80" style={{ flexShrink: 0 }}>
-          <circle
-            cx="40"
-            cy="40"
-            r="34"
-            fill="none"
-            stroke="rgba(196,248,42,0.12)"
-            strokeWidth="5"
-          />
-          <circle
-            cx="40"
-            cy="40"
-            r="34"
-            fill="none"
-            stroke={ACCENT}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeDasharray="80 134"
-            style={{ animation: 'spin 1.2s linear infinite', transformOrigin: '40px 40px' }}
-          />
-        </svg>
-
-        <p style={s.genTitle}>Генерация...</p>
-        <p style={s.genSubtitle}>Обычно занимает 15-30 секунд</p>
-
-        {/* Progress bar */}
-        <div style={s.progressTrack}>
-          <div style={s.progressFill} />
-        </div>
-
-        {taskId && (
-          <p style={s.genTaskId}>{taskId.slice(0, 8)}...</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ResultView({
-  resultUrl,
-  promptMode,
-  customPrompt,
-  onReset,
-}: {
-  resultUrl: string
-  promptMode: PromptMode
-  customPrompt: string
-  onReset: () => void
-}) {
-  return (
-    <div style={s.resultRoot} className="safe-bottom">
-      <div style={s.resultScroll}>
-        <div style={s.resultImgWrap}>
-          <img src={resultUrl} alt="Generated result" style={s.resultImg} />
-        </div>
-
-        {(promptMode === 'custom' || promptMode === 'adapted') && customPrompt && (
-          <div style={s.resultInfoCard}>
-            <p style={s.resultInfoLabel}>Промпт</p>
-            <p style={s.resultInfoText}>{customPrompt}</p>
-          </div>
-        )}
-
-        <div style={s.resultActions}>
-          <a
-            href={resultUrl}
-            download
-            style={s.downloadBtn}
-            onClick={() => hapticSuccess()}
-          >
-            <Download size={18} color="#0A0A0A" />
-            Скачать
-          </a>
-          <button style={s.againBtn} onClick={onReset}>
-            <RotateCcw size={18} color={TEXT} />
-            Создать ещё
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          height: 56, padding: "0 20px", flexShrink: 0,
+        }}>
+          <button onClick={() => navigate(-1)} style={{ display: "flex", padding: 0, background: "none", border: "none" }}>
+            <ArrowLeft size={24} color="#FFFFFF" />
           </button>
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 18, fontWeight: 700, color: "#FFFFFF" }}>
+            Создать фото
+          </span>
+          <div style={{ width: 24 }} />
+        </div>
+
+        {/* Step indicator */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, padding: "8px 20px" }}>
+          <div style={{ width: 32, height: 4, borderRadius: 2, background: "#C4F82A" }} />
+          <div style={{ width: 32, height: 4, borderRadius: 2, background: "#27272A" }} />
+          <div style={{ width: 32, height: 4, borderRadius: 2, background: "#27272A" }} />
+        </div>
+
+        {/* Scrollable content */}
+        <div style={{
+          flex: 1, overflowY: "auto", padding: "16px 20px",
+          display: "flex", flexDirection: "column", gap: 20,
+        }}>
+          {genderSelector}
+          {promptModeSection}
+          {promptSection}
+          {refsSection}
+          {aspectSection}
+          {modelSection}
+        </div>
+
+        {/* CTA */}
+        <div style={{ padding: "12px 20px 24px 20px", flexShrink: 0 }}>
+          {ctaButton}
+        </div>
+
+        {refTooltipOverlay}
+      </Layout>
+    );
+  }
+
+  /* ─── Desktop Layout ─── */
+  return (
+    <Layout>
+      {hiddenFileInput}
+
+      <div style={{ display: "flex", gap: 40, padding: "32px 0" }}>
+        {/* Settings column */}
+        <div style={{
+          width: 480, display: "flex", flexDirection: "column", gap: 24,
+          flexShrink: 0,
+        }}>
+          {/* Step indicator + token badge */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {[1, 2, 3].map((s, i) => (
+                <div key={s} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 100, display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                    background: s === 1 ? "#C4F82A" : "#18181B",
+                    border: s === 1 ? "none" : "1px solid #27272A",
+                  }}>
+                    <span style={{
+                      fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
+                      color: s === 1 ? "#0A0A0A" : "#52525B",
+                    }}>
+                      {s}
+                    </span>
+                  </div>
+                  {i < 2 && <div style={{ width: 40, height: 2, background: "#27272A" }} />}
+                </div>
+              ))}
+            </div>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "6px 12px", borderRadius: 100,
+              background: "#18181B", border: "1px solid #27272A",
+            }}>
+              <Coins size={14} color="#C4F82A" />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#C4F82A" }}>
+                47 токенов
+              </span>
+            </div>
+          </div>
+
+          {/* Mode section (only in post mode) */}
+          {!isStandalone && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+                Режим
+              </span>
+              <div style={{ display: "flex", gap: 8 }}>
+                {(["original", "custom"] as const).map((m) => {
+                  const active = promptMode === m;
+                  return (
+                    <button key={m} onClick={() => { haptic(); setPromptMode(m); }}
+                      style={{
+                        padding: "8px 18px", borderRadius: 100,
+                        background: active ? "#C4F82A" : "#18181B",
+                        border: active ? "none" : "1px solid #27272A",
+                        color: active ? "#0A0A0A" : "#A1A1AA",
+                        fontFamily: "var(--font-body)", fontSize: 13,
+                        fontWeight: active ? 600 : 500, transition: "all 0.2s",
+                      }}>
+                      {m === "original" ? "Original" : "Custom"}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {promptSection}
+
+          {/* Refs section */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+                Референсы
+              </span>
+              <button onClick={() => setShowRefTooltip(true)}
+                style={{
+                  width: 20, height: 20, borderRadius: 100, display: "flex",
+                  alignItems: "center", justifyContent: "center",
+                  border: "1px solid #52525B", background: "none", padding: 0,
+                }}>
+                <HelpCircle size={12} color="#52525B" />
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {/* Post mode refs */}
+              {!isStandalone && post && post.references.slice(0, 2).map((ref) => (
+                <div key={ref.order} style={{
+                  width: 80, height: 80, borderRadius: 12, overflow: "hidden",
+                  border: "1px solid #27272A",
+                }}>
+                  <img src={api.getReferenceImageUrl(post.id, ref.order)} alt=""
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+              ))}
+
+              {/* Standalone uploaded refs */}
+              {isStandalone && uploadedRefs.map((ref, idx) => (
+                <div key={idx} style={{
+                  width: 80, height: 80, borderRadius: 12, overflow: "hidden",
+                  border: ref.error ? "1px solid #EF4444" : "1px solid #27272A", position: "relative",
+                }}>
+                  <img src={ref.preview} alt=""
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  {ref.uploading && (
+                    <div style={{
+                      position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <Loader2 size={20} color="#C4F82A" style={{ animation: "spin 1s linear infinite" }} />
+                    </div>
+                  )}
+                  {!ref.uploading && (
+                    <button onClick={() => removeRef(idx)}
+                      style={{
+                        position: "absolute", top: 4, right: 4,
+                        width: 20, height: 20, borderRadius: 100,
+                        background: "rgba(0,0,0,0.7)", border: "none",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        padding: 0,
+                      }}>
+                      <X size={12} color="#FFFFFF" />
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {(isStandalone ? uploadedRefs.length < 3 : true) && (
+                <button
+                  onClick={isStandalone ? handleUploadRef : undefined}
+                  style={{
+                    width: 80, height: 80, borderRadius: 12, background: "none",
+                    border: "1px solid #27272A", display: "flex",
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                  <Plus size={24} color="#52525B" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Format section (desktop: pills) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#FFFFFF" }}>
+              Формат
+            </span>
+            <div style={{ display: "flex", gap: 8 }}>
+              {ASPECTS.filter((a) => availableFormats.includes(a.key)).map((a) => {
+                const active = aspect === a.key;
+                return (
+                  <button key={a.key} onClick={() => { haptic(); setAspect(a.key); }}
+                    style={{
+                      padding: "8px 18px", borderRadius: 100,
+                      display: "flex", alignItems: "center",
+                      background: active ? "#C4F82A" : "#18181B",
+                      border: active ? "none" : "1px solid #27272A",
+                      transition: "all 0.2s",
+                    }}>
+                    <span style={{
+                      fontFamily: "var(--font-primary)", fontSize: 13,
+                      fontWeight: active ? 700 : 500,
+                      color: active ? "#0A0A0A" : "#A1A1AA",
+                    }}>
+                      {a.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {modelSection}
+
+          {ctaButton}
+
+          {/* Sub info */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            gap: 6, padding: "8px 0",
+          }}>
+            <Sparkles size={14} color="#71717A" />
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#71717A" }}>
+              Нет токенов?
+            </span>
+            <button onClick={() => navigate("/pricing")} style={{ border: "none", background: "none", padding: 0 }}>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "#C4F82A" }}>
+                Подписка от 299р/мес
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Preview column */}
+        <div style={{
+          flex: 1, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 16,
+        }}>
+          <div style={{
+            width: 480, height: 480, borderRadius: 20, background: "#18181B",
+            border: "1px solid #27272A", display: "flex", alignItems: "center",
+            justifyContent: "center",
+          }}>
+            <Image size={48} color="#27272A" />
+          </div>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "#52525B" }}>
+            Превью будет здесь
+          </span>
         </div>
       </div>
-    </div>
-  )
-}
 
-// ---- Styles ----
-
-const s: Record<string, React.CSSProperties> = {
-  // Mobile root
-  mobileRoot: {
-    minHeight: '100vh',
-    background: BG,
-    overflowY: 'auto',
-  },
-
-  // Desktop root
-  desktopRoot: {
-    display: 'flex',
-    minHeight: '100vh',
-    background: BG,
-  },
-  desktopLeft: {
-    width: 480,
-    flexShrink: 0,
-    borderRight: `1px solid ${BORDER}`,
-    overflowY: 'auto',
-  },
-  desktopRight: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-    background: BG,
-  },
-
-  // Form scroll
-  formScroll: {
-    display: 'flex',
-    flexDirection: 'column',
-  },
-
-  // Header
-  header: {
-    padding: '24px 20px 8px',
-  },
-  title: {
-    fontFamily: 'var(--font-heading)',
-    fontSize: 24,
-    fontWeight: 700,
-    color: TEXT,
-    margin: 0,
-  },
-
-  // Error
-  errorBanner: {
-    margin: '0 20px 4px',
-    padding: '12px 16px',
-    background: 'rgba(239,68,68,0.1)',
-    border: '1px solid rgba(239,68,68,0.25)',
-    borderRadius: 16,
-    color: '#EF4444',
-    fontSize: 13,
-    fontFamily: 'var(--font-body)',
-  },
-
-  // Sections
-  section: {
-    padding: '12px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
-  sectionLabel: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 11,
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.08em',
-    color: TEXT_TER,
-    margin: 0,
-  },
-
-  // Post preview card
-  postCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    padding: '12px 14px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 16,
-  },
-  postThumb: {
-    width: 48,
-    height: 48,
-    objectFit: 'cover' as const,
-    borderRadius: 8,
-    border: `1px solid ${BORDER}`,
-    flexShrink: 0,
-  },
-  postCardLabel: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 11,
-    color: TEXT_TER,
-    margin: 0,
-  },
-  postCardCategory: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 14,
-    fontWeight: 600,
-    color: TEXT,
-    margin: '2px 0 0',
-  },
-
-  // Prompt mode tabs
-  tabRow: {
-    display: 'flex',
-    gap: 6,
-  },
-  tab: {
-    flex: 1,
-    padding: '10px 6px',
-    borderRadius: 100,
-    border: `1px solid ${BORDER}`,
-    fontFamily: 'var(--font-body)',
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'background 0.15s ease, border-color 0.15s ease, color 0.15s ease',
-  },
-  tabActive: {
-    background: ACCENT,
-    borderColor: ACCENT,
-    color: '#0A0A0A',
-    fontWeight: 600,
-  },
-  tabInactive: {
-    background: SURFACE,
-    color: TEXT_SEC,
-  },
-
-  // Textarea
-  textarea: {
-    width: '100%',
-    padding: '14px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 16,
-    color: TEXT,
-    fontFamily: 'var(--font-body)',
-    fontSize: 14,
-    lineHeight: '1.5',
-    outline: 'none',
-    resize: 'vertical' as const,
-    minHeight: 100,
-    transition: 'border-color 0.2s ease',
-    boxSizing: 'border-box' as const,
-  },
-  textareaFocused: {
-    borderColor: ACCENT,
-  },
-
-  // References toggle
-  refToggleRow: {
-    display: 'flex',
-    gap: 8,
-  },
-  refToggleBtn: {
-    flex: 1,
-    padding: '10px 12px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 100,
-    color: TEXT_SEC,
-    fontFamily: 'var(--font-body)',
-    fontSize: 13,
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'border-color 0.15s ease, color 0.15s ease',
-  },
-  refToggleBtnActive: {
-    borderColor: ACCENT,
-    color: ACCENT,
-  },
-
-  // Aspect ratio
-  ratioRow: {
-    display: 'flex',
-    gap: 8,
-  },
-  ratioBtn: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: 8,
-    padding: '14px 8px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 16,
-    cursor: 'pointer',
-    transition: 'border-color 0.15s ease, background 0.15s ease',
-  },
-  ratioBtnActive: {
-    borderColor: ACCENT,
-    background: `${ACCENT}10`,
-  },
-  ratioLabel: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 12,
-    fontWeight: 500,
-    color: TEXT_SEC,
-    transition: 'color 0.15s ease',
-  },
-
-  // Model grid
-  modelGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 8,
-  },
-  modelCard: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'flex-start',
-    gap: 4,
-    padding: '14px 14px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 16,
-    cursor: 'pointer',
-    textAlign: 'left' as const,
-    transition: 'border-color 0.15s ease, background 0.15s ease',
-  },
-  modelCardActive: {
-    borderColor: ACCENT,
-    background: `${ACCENT}0D`,
-  },
-  modelName: {
-    fontFamily: 'var(--font-heading)',
-    fontSize: 14,
-    fontWeight: 700,
-    color: TEXT,
-    margin: 0,
-    transition: 'color 0.15s ease',
-  },
-  modelDesc: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 11,
-    color: TEXT_TER,
-    margin: 0,
-    lineHeight: 1.4,
-  },
-  modelCost: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 11,
-    fontWeight: 600,
-    color: TEXT_SEC,
-    margin: '2px 0 0',
-    transition: 'color 0.15s ease',
-  },
-
-  // CTA
-  ctaSection: {
-    padding: '12px 20px 32px',
-  },
-  generateBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    padding: '16px 24px',
-    background: ACCENT,
-    border: 'none',
-    borderRadius: 100,
-    color: '#0A0A0A',
-    fontFamily: 'var(--font-heading)',
-    fontSize: 16,
-    fontWeight: 700,
-    cursor: 'pointer',
-    transition: 'opacity 0.15s ease, transform 0.15s ease',
-  },
-  generateBtnDisabled: {
-    background: SURFACE,
-    color: TEXT_TER,
-    cursor: 'not-allowed',
-  },
-
-  // Desktop preview
-  desktopPreviewWrap: {
-    width: '100%',
-    maxWidth: 560,
-    borderRadius: 20,
-    overflow: 'hidden',
-    border: `1px solid ${BORDER}`,
-    minHeight: 400,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: SURFACE,
-  },
-  desktopPreviewImg: {
-    width: '100%',
-    display: 'block',
-  },
-  desktopPreviewEmpty: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: 12,
-    padding: 40,
-  },
-  desktopPreviewEmptyIcon: {
-    opacity: 0.4,
-  },
-  desktopPreviewHint: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 14,
-    color: TEXT_TER,
-    margin: 0,
-  },
-
-  // Generating overlay
-  genOverlay: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: 'rgba(10,10,10,0.95)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 100,
-  },
-  genContent: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: 16,
-    padding: '0 32px',
-    textAlign: 'center' as const,
-  },
-  genTitle: {
-    fontFamily: 'var(--font-heading)',
-    fontSize: 20,
-    fontWeight: 700,
-    color: TEXT,
-    margin: 0,
-  },
-  genSubtitle: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 14,
-    color: TEXT_SEC,
-    margin: 0,
-  },
-  progressTrack: {
-    width: 200,
-    height: 4,
-    background: SURFACE,
-    borderRadius: 100,
-    overflow: 'hidden',
-    marginTop: 4,
-  },
-  progressFill: {
-    height: '100%',
-    background: ACCENT,
-    borderRadius: 100,
-    animation: 'progressPulse 2s ease-in-out infinite',
-    width: '60%',
-  },
-  genTaskId: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: 11,
-    color: TEXT_TER,
-    margin: 0,
-    opacity: 0.5,
-  },
-
-  // Result
-  resultRoot: {
-    minHeight: '100vh',
-    background: BG,
-  },
-  resultScroll: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 16,
-    padding: '24px 20px 32px',
-  },
-  resultImgWrap: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    border: `1px solid ${BORDER}`,
-  },
-  resultImg: {
-    width: '100%',
-    display: 'block',
-  },
-  resultInfoCard: {
-    padding: '14px 16px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 16,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 4,
-  },
-  resultInfoLabel: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 11,
-    fontWeight: 600,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em',
-    color: TEXT_TER,
-    margin: 0,
-  },
-  resultInfoText: {
-    fontFamily: 'var(--font-body)',
-    fontSize: 13,
-    color: TEXT_SEC,
-    margin: 0,
-    lineHeight: 1.5,
-  },
-  resultActions: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 10,
-  },
-  downloadBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    padding: '16px 24px',
-    background: ACCENT,
-    border: 'none',
-    borderRadius: 100,
-    color: '#0A0A0A',
-    fontFamily: 'var(--font-heading)',
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: 'pointer',
-    textDecoration: 'none',
-    boxSizing: 'border-box' as const,
-    transition: 'opacity 0.15s ease',
-  },
-  againBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    padding: '14px 24px',
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 100,
-    color: TEXT,
-    fontFamily: 'var(--font-body)',
-    fontSize: 15,
-    fontWeight: 500,
-    cursor: 'pointer',
-    transition: 'background 0.15s ease',
-  },
+      {refTooltipOverlay}
+    </Layout>
+  );
 }

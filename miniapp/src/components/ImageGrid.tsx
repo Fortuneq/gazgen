@@ -1,71 +1,31 @@
-import type { Post } from '../types'
-import PostCard from './PostCard'
+import type { Post } from "../types";
+import { PostCard } from "./PostCard";
 
 interface ImageGridProps {
-  posts: Post[]
-  startIndex?: number
+  posts: Post[];
+  columns?: number;
+  gap?: number;
+  onPostClick?: (post: Post) => void;
 }
 
-export default function ImageGrid({ posts, startIndex = 0 }: ImageGridProps) {
-  return (
-    <>
-      <style>{`
-        .image-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 8px;
-          padding: 0 16px;
-        }
-        @media (min-width: 768px) {
-          .image-grid {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-          }
-        }
-        @media (min-width: 1440px) {
-          .image-grid {
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-          }
-        }
-      `}</style>
-      <div className="image-grid">
-        {posts.map((post, i) => (
-          <PostCard key={post.id} post={post} index={startIndex + i} />
-        ))}
-      </div>
-    </>
-  )
-}
+export function ImageGrid({ posts, columns = 2, gap = 4, onPostClick }: ImageGridProps) {
+  const cols: { post: Post; originalIndex: number }[][] = Array.from({ length: columns }, () => []);
+  posts.forEach((p, i) => cols[i % columns].push({ post: p, originalIndex: i }));
 
-export function SkeletonGrid() {
   return (
-    <>
-      <style>{`
-        .image-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 8px;
-          padding: 0 16px;
-        }
-        @media (min-width: 768px) {
-          .image-grid {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-          }
-        }
-        @media (min-width: 1440px) {
-          .image-grid {
-            grid-template-columns: repeat(4, 1fr);
-            gap: 12px;
-          }
-        }
-      `}</style>
-      <div className="image-grid">
-        {[200, 260, 220, 240, 200, 250].map((h, i) => (
-          <div key={i} className="skeleton" style={{ borderRadius: 'var(--radius-md)', height: h }} />
-        ))}
-      </div>
-    </>
-  )
+    <div style={{ display: "flex", gap, padding: "0 20px" }}>
+      {cols.map((col, ci) => (
+        <div key={ci} style={{ flex: 1, display: "flex", flexDirection: "column", gap }}>
+          {col.map(({ post, originalIndex }) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              onClick={() => onPostClick?.(post)}
+              eager={originalIndex < 4}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }

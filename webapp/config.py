@@ -12,6 +12,7 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 KIE_API_KEY = os.getenv("KIE_API_KEY", "")
 IMGBB_API_KEY = os.getenv("IMGBB_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 MINIAPP_URL = os.getenv("MINIAPP_URL", "")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

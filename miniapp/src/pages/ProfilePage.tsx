@@ -1,316 +1,275 @@
-import { useState } from 'react'
-import { getUserProfile } from '../api'
-import { useIsDesktop } from '../hooks/useMediaQuery'
-import { User, Zap, Image, Film, Settings, ChevronRight } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Layout } from "../components/Layout";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { haptic, getUser } from "../telegram";
+import { Image, Video, Timer, X } from "lucide-react";
 
-type FilterTab = 'all' | 'photo' | 'video'
+type ProfileFilter = "all" | "photo" | "video" | "favorites";
+
+const FILTERS: { label: string; value: ProfileFilter }[] = [
+  { label: "Все", value: "all" },
+  { label: "Фото", value: "photo" },
+  { label: "Видео", value: "video" },
+  { label: "Избранное", value: "favorites" },
+];
+
+const MOCK_GALLERY = [
+  { id: 1, h: 160 }, { id: 2, h: 200 },
+  { id: 3, h: 200 }, { id: 4, h: 160 },
+];
 
 export default function ProfilePage() {
-  const profile = getUserProfile()
-  const isDesktop = useIsDesktop()
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<FilterTab>('all')
+  const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
+  const user = getUser();
+  const [filter, setFilter] = useState<ProfileFilter>("all");
+  const [showWarning, setShowWarning] = useState(true);
 
-  const filterTabs: { id: FilterTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'all', label: 'Все', icon: null },
-    { id: 'photo', label: 'Фото', icon: <Image size={14} /> },
-    { id: 'video', label: 'Видео', icon: <Film size={14} /> },
-  ]
+  const initials = user
+    ? (user.first_name?.[0] ?? "") + (user.last_name?.[0] ?? "")
+    : "НГ";
+  const displayName = user?.first_name ?? "Никита";
+  const handle = user?.username ? `@${user.username}` : "@nikita_design";
 
-  const settingsItems = [
-    { label: 'Язык', icon: <Settings size={16} /> },
-    { label: 'Уведомления', icon: <Settings size={16} /> },
-    { label: 'О приложении', icon: <Settings size={16} /> },
-  ]
-
-  const gridCols = isDesktop ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)'
-
-  return (
-    <div style={styles.page} className="safe-bottom">
-      <div style={{ maxWidth: isDesktop ? 800 : '100%', margin: '0 auto' }}>
-        {/* Avatar section */}
-        <div style={styles.avatarSection}>
-          <div style={styles.avatarWrap}>
-            {profile.photoUrl ? (
-              <img
-                src={profile.photoUrl}
-                alt={profile.username}
-                style={styles.avatarImg}
-              />
-            ) : (
-              <div style={styles.avatarFallback}>
-                <User size={36} color="var(--text-secondary)" />
-              </div>
-            )}
-          </div>
-          <p style={styles.username}>@{profile.username}</p>
-          <p style={styles.fullName}>
-            {profile.firstName}{profile.lastName ? ` ${profile.lastName}` : ''}
-          </p>
-        </div>
-
-        {/* Credits card */}
-        <div style={styles.creditsCard}>
-          <div style={styles.creditsRow}>
-            <div style={styles.creditsLeft}>
-              <Zap size={20} color="#C4F82A" />
-              <span style={styles.creditsLabel}>Баланс кредитов</span>
-            </div>
-            <span style={styles.creditsAmount}>{profile.credits}</span>
-          </div>
-          <button
-            style={styles.topUpBtn}
-            onClick={() => navigate('/pricing')}
-          >
-            Пополнить
+  const filterRow = (
+    <div style={{ display: "flex", gap: 8 }}>
+      {FILTERS.map((f) => {
+        const active = filter === f.value;
+        return (
+          <button key={f.value} onClick={() => { haptic(); setFilter(f.value); }}
+            style={{
+              padding: isDesktop ? "8px 18px" : "8px 16px", borderRadius: 100,
+              background: active ? "var(--accent)" : "var(--surface)",
+              border: active ? "none" : "1px solid var(--border)",
+            }}>
+            <span style={{
+              fontFamily: active ? (isDesktop ? "var(--font-primary)" : "var(--font-body)") : "var(--font-body)",
+              fontSize: 13, fontWeight: active ? (isDesktop ? 700 : 600) : 500,
+              color: active ? "#0A0A0A" : "var(--text-secondary)",
+            }}>{f.label}</span>
           </button>
-        </div>
+        );
+      })}
+    </div>
+  );
 
-        {/* Filter tabs */}
-        <div style={styles.tabsRow}>
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.id}
-              style={{
-                ...styles.tabBtn,
-                ...(activeTab === tab.id ? styles.tabBtnActive : styles.tabBtnInactive),
-              }}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.icon && <span style={{ display: 'flex', alignItems: 'center' }}>{tab.icon}</span>}
-              {tab.label}
-            </button>
-          ))}
-        </div>
+  const storageWarning = showWarning ? (
+    <div style={{
+      display: "flex", alignItems: "center", gap: isDesktop ? 10 : 8,
+      padding: isDesktop ? "12px 16px" : "10px 14px", borderRadius: 12,
+      background: "var(--surface)", border: "1px solid var(--border)", width: "100%",
+    }}>
+      {!isDesktop && (
+        <div style={{ width: 3, height: 28, borderRadius: 2, background: "#F59E0B", flexShrink: 0 }} />
+      )}
+      <Timer size={isDesktop ? 18 : 16} color="#F59E0B" style={{ flexShrink: 0 }} />
+      <span style={{ fontFamily: "var(--font-body)", fontSize: isDesktop ? 13 : 12, fontWeight: 500, color: "var(--text-secondary)", flex: 1 }}>
+        {isDesktop ? "Контент хранится 10 дней — скачайте, чтобы не потерять" : "Фото и видео хранятся 10 дней"}
+      </span>
+      {!isDesktop && (
+        <button onClick={() => setShowWarning(false)} style={{ padding: 0, flexShrink: 0 }}>
+          <X size={14} color="#52525B" />
+        </button>
+      )}
+    </div>
+  ) : null;
 
-        {/* Generation grid */}
-        <div style={{ ...styles.grid, gridTemplateColumns: gridCols }}>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} style={styles.gridCard}>
-              <div style={styles.gridCardInner}>
-                <p style={styles.gridCardText}>
-                  Скоро здесь будут<br />ваши работы
-                </p>
-              </div>
+  // DESKTOP
+  if (isDesktop) {
+    return (
+      <Layout showTabBar={false}>
+        <div style={{ padding: "32px 80px", display: "flex", flexDirection: "column", gap: 32 }}>
+          {/* Profile header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: 100,
+              background: "var(--surface)", border: "2px solid var(--accent)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <span style={{ fontFamily: "var(--font-primary)", fontSize: 28, fontWeight: 700, color: "var(--accent)" }}>{initials}</span>
             </div>
-          ))}
-        </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontFamily: "var(--font-primary)", fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{displayName}</span>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "var(--text-muted)" }}>{handle}</span>
+            </div>
+          </div>
 
-        {/* Settings section */}
-        <div style={styles.settingsSection}>
-          <p style={styles.sectionLabel}>Настройки</p>
-          <div style={styles.settingsList}>
-            {settingsItems.map((item, i) => (
-              <button key={i} style={styles.settingsItem}>
-                <div style={styles.settingsItemLeft}>
-                  <span style={styles.settingsIcon}>{item.icon}</span>
-                  <span style={styles.settingsLabel}>{item.label}</span>
-                </div>
-                <ChevronRight size={16} color="var(--text-tertiary)" />
-              </button>
+          {/* Balance card */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 24,
+            padding: "16px 24px", borderRadius: 16,
+            background: "var(--surface)", border: "1px solid var(--border)",
+          }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "var(--text-muted)" }}>Баланс:</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Image size={18} color="var(--accent)" />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>47 фото</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Video size={18} color="var(--accent)" />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>3 видео</span>
+            </div>
+            <button onClick={() => navigate("/pricing")}
+              style={{
+                padding: "10px 20px", borderRadius: 12,
+                background: "var(--accent)", border: "none", cursor: "pointer",
+              }}>
+              <span style={{ fontFamily: "var(--font-primary)", fontSize: 13, fontWeight: 700, color: "#0A0A0A" }}>Купить ещё</span>
+            </button>
+          </div>
+
+          {/* Filter & warning */}
+          {filterRow}
+          {storageWarning}
+
+          {/* Gallery grid */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} style={{
+                width: 240, height: 240, borderRadius: 16,
+                background: "var(--surface)", border: "1px solid var(--border)",
+                position: "relative", overflow: "hidden",
+              }}>
+                <button
+                  onClick={() => { haptic(); navigate("/create"); }}
+                  style={{
+                    position: "absolute", bottom: 10, left: 10, right: 10,
+                    padding: "8px 0", borderRadius: 10,
+                    background: "#C4F82A", border: "none", cursor: "pointer",
+                  }}
+                >
+                  <span style={{ fontFamily: "var(--font-primary)", fontSize: 13, fontWeight: 700, color: "#0A0A0A" }}>
+                    Создать
+                  </span>
+                </button>
+              </div>
             ))}
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
+      </Layout>
+    );
+  }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    padding: '0 0 32px',
-    color: 'var(--text)',
-  },
-  avatarSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '32px 16px 24px',
-    gap: 8,
-  },
-  avatarWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: '50%',
-    overflow: 'hidden',
-    border: '2px solid var(--border)',
-    marginBottom: 4,
-  },
-  avatarImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  avatarFallback: {
-    width: '100%',
-    height: '100%',
-    background: 'var(--surface)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  username: {
-    fontSize: 18,
-    fontWeight: 700,
-    fontFamily: 'var(--font-heading)',
-    color: 'var(--text)',
-    margin: 0,
-  },
-  fullName: {
-    fontSize: 14,
-    color: 'var(--text-secondary)',
-    margin: 0,
-  },
-  creditsCard: {
-    margin: '0 16px 20px',
-    padding: 20,
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 20,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 16,
-  },
-  creditsRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  creditsLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  creditsLabel: {
-    fontSize: 14,
-    color: 'var(--text-secondary)',
-    fontFamily: 'var(--font-body)',
-  },
-  creditsAmount: {
-    fontSize: 28,
-    fontWeight: 700,
-    fontFamily: 'var(--font-heading)',
-    color: '#C4F82A',
-  },
-  topUpBtn: {
-    width: '100%',
-    padding: '12px 24px',
-    background: '#C4F82A',
-    color: '#0A0A0A',
-    border: 'none',
-    borderRadius: 'var(--radius-pill)',
-    fontSize: 15,
-    fontWeight: 600,
-    fontFamily: 'var(--font-body)',
-    cursor: 'pointer',
-    transition: 'opacity 0.15s ease',
-  },
-  tabsRow: {
-    display: 'flex',
-    gap: 8,
-    padding: '0 16px 16px',
-    overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch',
-  },
-  tabBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    padding: '8px 16px',
-    borderRadius: 'var(--radius-pill)',
-    fontSize: 14,
-    fontWeight: 500,
-    fontFamily: 'var(--font-body)',
-    cursor: 'pointer',
-    border: '1px solid var(--border)',
-    whiteSpace: 'nowrap',
-    transition: 'background 0.15s ease, color 0.15s ease',
-    flexShrink: 0,
-  },
-  tabBtnActive: {
-    background: '#C4F82A',
-    color: '#0A0A0A',
-    borderColor: '#C4F82A',
-  },
-  tabBtnInactive: {
-    background: 'var(--surface)',
-    color: 'var(--text-secondary)',
-  },
-  grid: {
-    display: 'grid',
-    gap: 8,
-    padding: '0 16px 24px',
-  },
-  gridCard: {
-    height: 200,
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    overflow: 'hidden',
-  },
-  gridCardInner: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  gridCardText: {
-    fontSize: 12,
-    color: 'var(--text-tertiary)',
-    textAlign: 'center',
-    lineHeight: 1.6,
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-  },
-  settingsSection: {
-    padding: '0 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--text-tertiary)',
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-  },
-  settingsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  settingsItem: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-md)',
-    cursor: 'pointer',
-    width: '100%',
-    transition: 'background 0.15s ease',
-  },
-  settingsItemLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-  },
-  settingsIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    color: 'var(--text-secondary)',
-  },
-  settingsLabel: {
-    fontSize: 15,
-    color: 'var(--text)',
-    fontFamily: 'var(--font-body)',
-  },
+  // MOBILE
+  return (
+    <Layout showTabBar>
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        padding: "16px 20px", gap: 16,
+      }}>
+        {/* Avatar */}
+        <div style={{
+          width: 72, height: 72, borderRadius: 36,
+          background: "var(--surface)", border: "2px solid var(--accent)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 24, fontWeight: 700, color: "var(--accent)" }}>{initials}</span>
+        </div>
+        <span style={{ fontFamily: "var(--font-primary)", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{displayName}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#52525B" }}>{handle}</span>
+
+        {/* Balance row */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 20px", borderRadius: 16, width: "100%",
+          background: "var(--surface)", border: "1px solid var(--border)",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 500, color: "#52525B" }}>Баланс</span>
+            <div style={{ display: "flex", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <Image size={14} color="var(--accent)" />
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>47 фото</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <Video size={14} color="var(--accent)" />
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>3 видео</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={() => navigate("/pricing")}
+            style={{
+              padding: "8px 14px", borderRadius: 10,
+              background: "var(--accent)", border: "none", cursor: "pointer",
+            }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700, color: "#0A0A0A" }}>Купить</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ padding: "0 20px 12px", overflowX: "auto", scrollbarWidth: "none" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {filterRow}
+        </div>
+      </div>
+
+      {/* Storage warning */}
+      {showWarning && (
+        <div style={{ padding: "0 20px", height: 59 }}>
+          {storageWarning}
+        </div>
+      )}
+
+      {/* Gallery grid - masonry style */}
+      <div style={{ display: "flex", gap: 8, padding: "8px 20px", flex: 1 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+          {MOCK_GALLERY.filter((_, i) => i % 2 === 0).map((item, idx) => (
+            <div key={item.id} style={{
+              width: "100%", height: item.h, borderRadius: 12,
+              background: "var(--surface)", border: "1px solid var(--border)",
+              position: "relative", overflow: "hidden",
+            }}>
+              {idx === 0 && (
+                <div style={{
+                  position: "absolute", top: 8, left: 8,
+                  padding: "3px 8px", borderRadius: 6,
+                  background: "rgba(196,248,42,0.15)", border: "1px solid #C4F82A",
+                }}>
+                  <span style={{ fontFamily: "var(--font-body)", fontSize: 10, fontWeight: 600, color: "#C4F82A" }}>
+                    Избранное
+                  </span>
+                </div>
+              )}
+              <button
+                onClick={() => { haptic(); navigate("/create"); }}
+                style={{
+                  position: "absolute", bottom: 8, left: 8, right: 8,
+                  padding: "7px 0", borderRadius: 8,
+                  background: "#C4F82A", border: "none", cursor: "pointer",
+                }}
+              >
+                <span style={{ fontFamily: "var(--font-primary)", fontSize: 12, fontWeight: 700, color: "#0A0A0A" }}>
+                  Создать
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+          {MOCK_GALLERY.filter((_, i) => i % 2 === 1).map((item) => (
+            <div key={item.id} style={{
+              width: "100%", height: item.h, borderRadius: 12,
+              background: "var(--surface)", border: "1px solid var(--border)",
+              position: "relative", overflow: "hidden",
+            }}>
+              <button
+                onClick={() => { haptic(); navigate("/create"); }}
+                style={{
+                  position: "absolute", bottom: 8, left: 8, right: 8,
+                  padding: "7px 0", borderRadius: 8,
+                  background: "#C4F82A", border: "none", cursor: "pointer",
+                }}
+              >
+                <span style={{ fontFamily: "var(--font-primary)", fontSize: 12, fontWeight: 700, color: "#0A0A0A" }}>
+                  Создать
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Layout>
+  );
 }

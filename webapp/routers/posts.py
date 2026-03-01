@@ -9,13 +9,30 @@ router = APIRouter()
 @router.get("/posts", response_model=PaginatedPosts)
 async def list_posts(
     category: str | None = Query(None),
+    tag: str | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
     pool = get_pool()
     offset = (page - 1) * limit
 
-    if category:
+    if tag:
+        rows = await pool.fetch(
+            """
+            SELECT p.id, p.publication_id, p.prompt, p.model_name AS category, p.created_at,
+                   EXISTS(SELECT 1 FROM images WHERE post_id = p.id AND image_type = 'result') AS has_result,
+                   (SELECT count(*) FROM images WHERE post_id = p.id AND image_type = 'reference') AS ref_count
+            FROM posts p
+            WHERE $1 = ANY(p.tags)
+            ORDER BY p.id DESC
+            LIMIT $2 OFFSET $3
+            """,
+            tag, limit, offset,
+        )
+        total = await pool.fetchval(
+            "SELECT count(*) FROM posts WHERE $1 = ANY(tags)", tag
+        )
+    elif category:
         rows = await pool.fetch(
             """
             SELECT p.id, p.publication_id, p.prompt, p.model_name AS category, p.created_at,

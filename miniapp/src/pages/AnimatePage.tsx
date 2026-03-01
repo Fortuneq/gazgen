@@ -1,388 +1,375 @@
-import { useState, useRef } from 'react'
-import { useIsDesktop } from '../hooks/useMediaQuery'
-import { haptic } from '../telegram'
-import { Upload, Play, Clock, Wand2, Film } from 'lucide-react'
+import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Layout } from "../components/Layout";
+import { useIsDesktop } from "../hooks/useMediaQuery";
+import { haptic } from "../telegram";
+import { Upload, Video, Image, Clapperboard, AlertTriangle, X as XIcon } from "lucide-react";
+import type { AnimateModel } from "../types";
 
-type AnimateModel = 'standard' | 'pro' | 'ultra'
+type AnimeDuration = "5" | "10" | "15";
 
-const DURATION_VALUES: string[] = ['3с', '5с', '10с']
+const DURATIONS: { label: string; value: AnimeDuration }[] = [
+  { label: "5 сек", value: "5" },
+  { label: "10 сек", value: "10" },
+  { label: "15 сек", value: "15" },
+];
 
-const ANIMATE_MODELS: { id: AnimateModel; label: string }[] = [
-  { id: 'standard', label: 'Standard' },
-  { id: 'pro', label: 'Pro' },
-  { id: 'ultra', label: 'Ultra' },
-]
+const MODELS: { label: string; value: AnimateModel; cost: number }[] = [
+  { label: "Kling 2.6", value: "kling2.6", cost: 3 },
+  { label: "Kling 3.0", value: "kling3.0", cost: 5 },
+  { label: "Veo", value: "veo", cost: 4 },
+];
 
 export default function AnimatePage() {
-  const isDesktop = useIsDesktop()
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [selectedDuration, setSelectedDuration] = useState<string>('5с')
-  const [selectedModel, setSelectedModel] = useState<AnimateModel>('standard')
-  const [isDragOver, setIsDragOver] = useState(false)
+  const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [duration, setDuration] = useState<AnimeDuration>("5");
+  const [model, setModel] = useState<AnimateModel>("kling2.6");
+  const [prompt, setPrompt] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [showDurationWarning, setShowDurationWarning] = useState(true);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setSelectedFile(file)
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-    haptic('light')
-  }
+  const cost = MODELS.find((m) => m.value === model)?.cost ?? 3;
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragOver(true)
-  }
+  const durationWarning = duration === "15" && showDurationWarning ? (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 10,
+      padding: isDesktop ? "14px 16px" : "12px 14px", borderRadius: 12,
+      background: "#1A2E05", border: "1px solid #3F6212", width: "100%",
+    }}>
+      <AlertTriangle size={18} color="#C4F82A" style={{ flexShrink: 0, marginTop: 1 }} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontFamily: "var(--font-primary)", fontSize: 13, fontWeight: 700, color: "#C4F82A" }}>
+          Долгая генерация
+        </span>
+        <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#A1A1AA", lineHeight: 1.4 }}>
+          Видео длительностью 15 секунд генерируется значительно дольше. Ожидание может составить до 5–10 минут.
+        </span>
+      </div>
+      <button onClick={() => setShowDurationWarning(false)} style={{ padding: 0, background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
+        <XIcon size={16} color="#71717A" />
+      </button>
+    </div>
+  ) : null;
 
-  const handleDragLeave = () => {
-    setIsDragOver(false)
-  }
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (!file || !file.type.startsWith('image/')) return
-    setSelectedFile(file)
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-    haptic('light')
-  }
-
-  const handleAnimate = () => {
-    haptic('medium')
-    alert('Функция скоро будет доступна!')
-  }
+  const handleFile = (file: File) => {
+    if (file.size > 10 * 1024 * 1024) return;
+    if (!file.type.startsWith("image/")) return;
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+  };
 
   const handleUploadClick = () => {
-    fileInputRef.current?.click()
-  }
+    haptic();
+    fileInputRef.current?.click();
+  };
 
-  return (
-    <div style={styles.page} className="safe-bottom">
-      <div style={{ maxWidth: isDesktop ? 720 : '100%', margin: '0 auto' }}>
-        {/* Header */}
-        <div style={styles.header}>
-          <h1 style={styles.title}>Анимация</h1>
-          <p style={styles.subtitle}>Преврати фото в видео</p>
-        </div>
+  const handleSubmit = () => {
+    if (!selectedFile) return;
+    haptic("medium");
+    // submit from this page directly
+  };
 
-        {/* Upload area */}
-        <div style={styles.uploadSection}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: 'none' }}
-            onChange={handleFileChange}
-          />
-          <div
-            style={{
-              ...styles.uploadArea,
-              ...(isDragOver ? styles.uploadAreaDragOver : {}),
-              ...(previewUrl ? styles.uploadAreaWithPreview : {}),
-            }}
-            onClick={handleUploadClick}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {previewUrl ? (
-              <div style={styles.previewWrap}>
-                <img src={previewUrl} alt="Preview" style={styles.previewImg} />
-                <div style={styles.previewOverlay}>
-                  <div style={styles.previewOverlayInner}>
-                    <Upload size={20} color="#fff" />
-                    <span style={styles.previewOverlayText}>Заменить</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={styles.uploadContent}>
-                <div style={styles.uploadIconWrap}>
-                  <Upload size={32} color="var(--text-secondary)" />
-                </div>
-                <p style={styles.uploadTitle}>Загрузи фото</p>
-                <p style={styles.uploadSubtitle}>или перетащи сюда</p>
-              </div>
-            )}
-          </div>
-        </div>
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
 
-        {/* Duration selector */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <Clock size={16} color="var(--text-secondary)" />
-            <p style={styles.sectionLabel}>Длительность</p>
-          </div>
-          <div style={styles.pillsRow}>
-            {DURATION_VALUES.map((dur) => (
-              <button
-                key={dur}
-                style={{
-                  ...styles.pillBtn,
-                  ...(selectedDuration === dur ? styles.pillBtnActive : styles.pillBtnInactive),
-                }}
-                onClick={() => {
-                  haptic('light')
-                  setSelectedDuration(dur)
-                }}
-              >
-                {dur}
-              </button>
-            ))}
-          </div>
-        </div>
+  const handleDragLeave = () => setIsDragging(false);
 
-        {/* Model selector */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <Wand2 size={16} color="var(--text-secondary)" />
-            <p style={styles.sectionLabel}>Модель</p>
-          </div>
-          <div style={styles.pillsRow}>
-            {ANIMATE_MODELS.map((model) => (
-              <button
-                key={model.id}
-                style={{
-                  ...styles.pillBtn,
-                  ...(selectedModel === model.id ? styles.pillBtnActive : styles.pillBtnInactive),
-                }}
-                onClick={() => {
-                  haptic('light')
-                  setSelectedModel(model.id)
-                }}
-              >
-                {model.label}
-              </button>
-            ))}
-          </div>
-        </div>
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
 
-        {/* Info row */}
-        {selectedFile && (
-          <div style={styles.fileInfo} className="animate-in">
-            <Film size={14} color="var(--text-tertiary)" />
-            <span style={styles.fileInfoText}>{selectedFile.name}</span>
-          </div>
-        )}
+  const uploadAreaMobile = (
+    <div
+      onClick={handleUploadClick}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 12, borderRadius: 20,
+        background: "var(--surface)", border: "1px dashed var(--border)",
+        height: 160, width: "100%", cursor: "pointer",
+        overflow: "hidden", position: "relative",
+      }}
+    >
+      {preview ? (
+        <img src={preview} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <>
+          <Upload size={40} color="#52525B" />
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+            Загрузи фото
+          </span>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500, color: "#52525B" }}>
+            JPG, PNG до 10 МБ
+          </span>
+        </>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png"
+        style={{ display: "none" }}
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+      />
+    </div>
+  );
 
-        {/* CTA */}
-        <div style={styles.ctaWrap}>
-          <button
-            style={{
-              ...styles.ctaBtn,
-              ...(selectedFile ? styles.ctaBtnEnabled : styles.ctaBtnDisabled),
-            }}
-            disabled={!selectedFile}
-            onClick={handleAnimate}
-          >
-            <Play size={18} color={selectedFile ? '#0A0A0A' : 'var(--text-tertiary)'} />
-            Анимировать ✨
-          </button>
-        </div>
+  const uploadAreaDesktop = (
+    <div
+      onClick={handleUploadClick}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        gap: 12, borderRadius: 16,
+        background: isDragging ? "#18181B" : "var(--surface)",
+        border: `2px dashed ${isDragging ? "#C4F82A" : "var(--border)"}`,
+        height: 240, width: "100%", cursor: "pointer",
+        overflow: "hidden", position: "relative",
+        transition: "border-color 0.15s",
+      }}
+    >
+      {preview ? (
+        <img src={preview} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      ) : (
+        <>
+          <Upload size={48} color="#52525B" />
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+            Перетащите фото сюда
+          </span>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500, color: "#52525B" }}>
+            JPG, PNG до 10 МБ
+          </span>
+        </>
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png"
+        style={{ display: "none" }}
+        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+      />
+    </div>
+  );
+
+  const promptSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: isDesktop ? 10 : 12, width: "100%" }}>
+      <span style={{
+        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
+        fontSize: isDesktop ? 14 : 16, fontWeight: isDesktop ? 600 : 700,
+        color: isDesktop ? "var(--text-secondary)" : "var(--text)",
+      }}>
+        Описание движения
+      </span>
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="Опишите, как должно двигаться фото..."
+        style={{
+          width: "100%", height: 100, borderRadius: isDesktop ? 12 : 16,
+          background: "var(--surface)", border: "1px solid var(--border)",
+          color: "var(--text)", fontFamily: "var(--font-body)", fontSize: 14,
+          fontWeight: 500, padding: "12px 14px", resize: "none",
+          outline: "none", boxSizing: "border-box",
+        }}
+      />
+    </div>
+  );
+
+  const durationSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: isDesktop ? 10 : 12, width: "100%" }}>
+      <span style={{
+        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
+        fontSize: isDesktop ? 14 : 16, fontWeight: isDesktop ? 600 : 700,
+        color: isDesktop ? "var(--text-secondary)" : "var(--text)",
+      }}>
+        Длительность
+      </span>
+      <div style={{ display: "flex", gap: 8, width: "100%" }}>
+        {DURATIONS.map((d) => {
+          const active = duration === d.value;
+          return (
+            <button key={d.value} onClick={() => { haptic(); setDuration(d.value); }}
+              style={{
+                flex: isDesktop ? undefined : 1,
+                padding: isDesktop ? "8px 20px" : "10px 16px",
+                borderRadius: isDesktop ? 100 : 12,
+                background: active ? "var(--accent)" : "var(--surface)",
+                border: active ? "none" : "1px solid var(--border)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+              <span style={{
+                fontFamily: "var(--font-body)", fontSize: 13,
+                fontWeight: active ? 600 : 500,
+                color: active ? "#0A0A0A" : "var(--text-secondary)",
+              }}>
+                {d.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
-  )
-}
+  );
 
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    padding: '0 0 40px',
-    color: 'var(--text)',
-  },
-  header: {
-    padding: '24px 16px 20px',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 700,
-    fontFamily: 'var(--font-heading)',
-    color: 'var(--text)',
-    margin: '0 0 4px',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'var(--text-secondary)',
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-  },
-  uploadSection: {
-    padding: '0 16px 20px',
-  },
-  uploadArea: {
-    border: '2px dashed var(--border)',
-    borderRadius: 20,
-    minHeight: 220,
-    cursor: 'pointer',
-    overflow: 'hidden',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'border-color 0.2s ease, background 0.2s ease',
-    background: 'var(--surface)',
-  },
-  uploadAreaDragOver: {
-    borderColor: '#C4F82A',
-    background: 'rgba(196, 248, 42, 0.05)',
-  },
-  uploadAreaWithPreview: {
-    minHeight: 260,
-    padding: 0,
-  },
-  uploadContent: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 10,
-    padding: '32px 24px',
-  },
-  uploadIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    background: 'var(--bg)',
-    border: '1px solid var(--border)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  uploadTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    fontFamily: 'var(--font-heading)',
-    color: 'var(--text)',
-    margin: 0,
-  },
-  uploadSubtitle: {
-    fontSize: 13,
-    color: 'var(--text-tertiary)',
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-  },
-  previewWrap: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-    minHeight: 260,
-  },
-  previewImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-    minHeight: 260,
-  },
-  previewOverlay: {
-    position: 'absolute',
-    inset: 0,
-    background: 'rgba(0,0,0,0.4)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0,
-    transition: 'opacity 0.2s ease',
-  },
-  previewOverlayInner: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 8,
-  },
-  previewOverlayText: {
-    fontSize: 14,
-    color: '#fff',
-    fontFamily: 'var(--font-body)',
-    fontWeight: 500,
-  },
-  section: {
-    padding: '0 16px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  sectionHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
-    margin: 0,
-    fontFamily: 'var(--font-body)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  },
-  pillsRow: {
-    display: 'flex',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  pillBtn: {
-    padding: '8px 20px',
-    borderRadius: 'var(--radius-pill)',
-    fontSize: 14,
-    fontWeight: 500,
-    fontFamily: 'var(--font-body)',
-    cursor: 'pointer',
-    border: '1px solid var(--border)',
-    transition: 'background 0.15s ease, color 0.15s ease, border-color 0.15s ease',
-  },
-  pillBtnActive: {
-    background: '#C4F82A',
-    color: '#0A0A0A',
-    borderColor: '#C4F82A',
-  },
-  pillBtnInactive: {
-    background: 'var(--surface)',
-    color: 'var(--text-secondary)',
-  },
-  fileInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '0 16px 16px',
-  },
-  fileInfoText: {
-    fontSize: 12,
-    color: 'var(--text-tertiary)',
-    fontFamily: 'var(--font-mono)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  ctaWrap: {
-    padding: '4px 16px 0',
-  },
-  ctaBtn: {
-    width: '100%',
-    padding: '14px 24px',
-    borderRadius: 'var(--radius-pill)',
-    fontSize: 16,
-    fontWeight: 600,
-    fontFamily: 'var(--font-body)',
-    cursor: 'pointer',
-    border: 'none',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    transition: 'opacity 0.2s ease',
-  },
-  ctaBtnEnabled: {
-    background: '#C4F82A',
-    color: '#0A0A0A',
-  },
-  ctaBtnDisabled: {
-    background: 'var(--surface)',
-    color: 'var(--text-tertiary)',
-    cursor: 'not-allowed',
-    border: '1px solid var(--border)',
-  },
+  const modelSection = (
+    <div style={{ display: "flex", flexDirection: "column", gap: isDesktop ? 10 : 12, width: "100%" }}>
+      <span style={{
+        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
+        fontSize: isDesktop ? 14 : 16, fontWeight: isDesktop ? 600 : 700,
+        color: isDesktop ? "var(--text-secondary)" : "var(--text)",
+      }}>
+        Модель
+      </span>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
+        {MODELS.map((m) => {
+          const active = model === m.value;
+          return (
+            <button key={m.value} onClick={() => { haptic(); setModel(m.value); }}
+              style={{
+                padding: isDesktop ? "8px 20px" : "8px 14px",
+                borderRadius: isDesktop ? 100 : 12,
+                background: active ? "var(--accent)" : "var(--surface)",
+                border: active ? "none" : "1px solid var(--border)",
+              }}>
+              <span style={{
+                fontFamily: "var(--font-body)", fontSize: 13,
+                fontWeight: active ? 600 : 500,
+                color: active ? "#0A0A0A" : "var(--text-secondary)",
+              }}>
+                {m.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const costRow = (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: isDesktop ? "14px 16px" : "12px 16px", borderRadius: 12,
+      background: "var(--surface)", border: "1px solid var(--border)", width: "100%",
+    }}>
+      <span style={{ fontFamily: "var(--font-body)", fontSize: isDesktop ? 14 : 13, fontWeight: 500, color: "var(--text-secondary)" }}>
+        Стоимость
+      </span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: isDesktop ? 16 : 14, fontWeight: isDesktop ? 700 : 500, color: "var(--accent)" }}>
+        ⚡ {cost} кредита
+      </span>
+    </div>
+  );
+
+  const ctaButton = (
+    <button onClick={handleSubmit}
+      style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+        width: "100%", height: 52, borderRadius: isDesktop ? 12 : 16,
+        background: "#C4F82A", border: "none", cursor: "pointer",
+        opacity: selectedFile ? 1 : 0.5,
+      }}
+      disabled={!selectedFile}
+    >
+      {isDesktop ? (
+        <Clapperboard size={18} color="#0A0A0A" />
+      ) : (
+        <Video size={20} color="#0A0A0A" />
+      )}
+      <span style={{
+        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
+        fontSize: isDesktop ? 15 : 16, fontWeight: 700, color: "#0A0A0A",
+      }}>
+        Оживить — {cost} кредита
+      </span>
+    </button>
+  );
+
+  // DESKTOP
+  if (isDesktop) {
+    return (
+      <Layout showTabBar={false}>
+        <div style={{ display: "flex", gap: 48, padding: "40px 60px", flex: 1 }}>
+          {/* Left column - settings */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 24, width: 480 }}>
+            {/* Breadcrumb */}
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-muted)" }}>
+              Создать &gt; Оживить фото
+            </span>
+            <h1 style={{ fontFamily: "var(--font-primary)", fontSize: 28, fontWeight: 700, color: "var(--text)", margin: 0 }}>
+              Оживить фото
+            </h1>
+            {/* Фото section */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "var(--text-secondary)" }}>Фото</span>
+              {uploadAreaDesktop}
+            </div>
+            {promptSection}
+            {durationSection}
+            {durationWarning}
+            {modelSection}
+            {costRow}
+            {ctaButton}
+          </div>
+          {/* Right column - preview */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flex: 1,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexDirection: "column", gap: 12,
+              width: 520, height: 520, borderRadius: 16,
+              background: "var(--surface)", border: "1px solid var(--border)",
+              overflow: "hidden",
+            }}>
+              {preview ? (
+                <img src={preview} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <>
+                  <Image size={64} color="#27272A" />
+                  <span style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "#52525B" }}>
+                    Превью будет здесь
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // MOBILE
+  return (
+    <Layout title="Оживить фото" showBack showTabBar={false}>
+      <div style={{
+        display: "flex", flexDirection: "column", gap: 20,
+        padding: "16px 20px", flex: 1,
+      }}>
+        {/* Фото section */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Фото</span>
+          {uploadAreaMobile}
+        </div>
+        {promptSection}
+        {durationSection}
+        {modelSection}
+        {costRow}
+      </div>
+      <div style={{ padding: "12px 20px 24px 20px" }}>
+        {ctaButton}
+      </div>
+    </Layout>
+  );
 }

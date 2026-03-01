@@ -1,115 +1,64 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import type { Post } from '../types'
-import { getImageUrl } from '../api'
-import { haptic } from '../telegram'
+import { useState } from "react";
+import type { Post } from "../types";
+import { api } from "../api";
 
 interface PostCardProps {
-  post: Post
-  index: number
+  post: Post;
+  onClick?: () => void;
+  aspectRatio?: string;
+  eager?: boolean;
 }
 
-export default function PostCard({ post, index }: PostCardProps) {
-  const navigate = useNavigate()
-  const [loaded, setLoaded] = useState(false)
+export function PostCard({ post, onClick, aspectRatio, eager = false }: PostCardProps) {
+  const hasImage = post.has_result_image;
+  const [loaded, setLoaded] = useState(false);
 
-  const staggerClass = `stagger-${Math.min(index % 8 + 1, 8)}`
-
-  const handleClick = () => {
-    haptic('light')
-    navigate(`/post/${post.id}`)
-  }
+  const deterministicRatio =
+    post.id % 3 === 0 ? "4/5" : post.id % 3 === 1 ? "3/4" : "1/1";
 
   return (
-    <div
-      className={`animate-in ${staggerClass}`}
-      style={styles.card}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-    >
-      <div style={styles.imageWrap}>
-        {!loaded && <div className="skeleton" style={styles.skeleton} />}
+    <button onClick={onClick}
+      style={{
+        width: "100%", borderRadius: 12, overflow: "hidden", position: "relative",
+        background: "#18181B", border: "none", padding: 0, cursor: "pointer",
+        aspectRatio: aspectRatio || deterministicRatio,
+        display: "block",
+      }}>
+      {hasImage && !loaded && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(90deg, #18181B 25%, #27272A 50%, #18181B 75%)",
+          backgroundSize: "200% 100%",
+          animation: "shimmer 1.5s infinite",
+        }} />
+      )}
+      {hasImage && (
         <img
-          src={getImageUrl(post.id)}
-          alt={post.prompt || 'Generated image'}
-          loading="lazy"
+          src={api.getResultImageUrl(post.id)}
+          alt={post.prompt || "Generated image"}
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
           onLoad={() => setLoaded(true)}
           style={{
-            ...styles.image,
-            opacity: loaded ? 1 : 0,
+            width: "100%", height: "100%", objectFit: "cover", display: "block",
+            opacity: loaded ? 1 : 0, transition: "opacity 0.2s",
           }}
         />
-      </div>
-      <div style={styles.info}>
-        <span style={styles.badge}>
-          {post.category_emoji} {post.category}
-        </span>
-        {post.prompt && (
-          <p style={styles.prompt}>{post.prompt}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  card: {
-    borderRadius: 'var(--radius-lg)',
-    overflow: 'hidden',
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    cursor: 'pointer',
-    transition: 'transform 0.15s ease',
-    breakInside: 'avoid',
-  },
-  imageWrap: {
-    position: 'relative',
-    width: '100%',
-    minHeight: 200,
-    overflow: 'hidden',
-    background: 'var(--surface)',
-  },
-  skeleton: {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-  },
-  image: {
-    width: '100%',
-    display: 'block',
-    objectFit: 'cover',
-    transition: 'opacity 0.3s ease',
-    border: 'none',
-  },
-  info: {
-    padding: '12px 14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-  },
-  badge: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    fontSize: 12,
-    fontWeight: 500,
-    color: 'var(--text-secondary)',
-    background: 'rgba(255,255,255,0.06)',
-    padding: '4px 10px',
-    borderRadius: 'var(--radius-pill)',
-    alignSelf: 'flex-start',
-  },
-  prompt: {
-    fontSize: 13,
-    lineHeight: 1.4,
-    color: 'var(--text-secondary)',
-    fontFamily: 'var(--font-body)',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-    margin: 0,
-  },
+      )}
+      {!hasImage && (
+        <div style={{
+          width: "100%", height: "100%", display: "flex", alignItems: "center",
+          justifyContent: "center", color: "#71717A", fontSize: 13,
+        }}>
+          No image
+        </div>
+      )}
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+    </button>
+  );
 }
