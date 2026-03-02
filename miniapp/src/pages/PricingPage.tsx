@@ -1,161 +1,241 @@
-import { Navigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic } from "../telegram";
-import { Image, Video } from "lucide-react";
+import { api } from "../api";
+import { Zap, Coins } from "lucide-react";
 
-const MODEL_TABS = [
-  "Nano Banana", "Nano Banana PRO", "Sora", "FLUX", "Stable Diffusion", "Imagen 4", "Seedream",
+interface SubPlan {
+  name: string;
+  price: string;
+  tokens: string;
+  features: string[];
+  highlight: boolean;
+  badge?: string;
+}
+
+const SUBSCRIPTIONS: SubPlan[] = [
+  {
+    name: "Старт",
+    price: "299₽",
+    tokens: "50 токенов",
+    features: ["Базовые модели"],
+    highlight: false,
+  },
+  {
+    name: "Про",
+    price: "699₽",
+    tokens: "200 токенов",
+    features: ["Все модели", "Приоритет"],
+    highlight: true,
+    badge: "ХИТ",
+  },
+  {
+    name: "Ультра",
+    price: "1 490₽",
+    tokens: "500 токенов",
+    features: ["Все модели", "Приоритет", "4K экспорт"],
+    highlight: false,
+  },
 ];
 
-const PHOTO_PACKS = [
-  { count: 10, price: "149 ₽", per: "14.9 ₽ / фото", best: false },
-  { count: 100, price: "990 ₽", per: "9.9 ₽ / фото", best: true },
-];
+interface TokenPack {
+  tokens: string;
+  price: string;
+  highlight: boolean;
+  badge?: string;
+}
 
-const VIDEO_PACKS = [
-  { count: 1, price: "99 ₽", discount: null, best: false },
-  { count: 5, price: "399 ₽", discount: "-20%", best: true },
-  { count: 10, price: "699 ₽", discount: null, best: false },
+const TOKEN_PACKS: TokenPack[] = [
+  { tokens: "50 токенов", price: "199₽", highlight: false },
+  { tokens: "150 токенов", price: "499₽", highlight: true, badge: "ВЫГОДНО" },
+  { tokens: "500 токенов", price: "1 490₽", highlight: false },
 ];
 
 export default function PricingPage() {
   const isDesktop = useIsDesktop();
-  const [activeModel, setActiveModel] = useState("Nano Banana");
+  const [photoCredits, setPhotoCredits] = useState(0);
 
-  // MOBILE
-  if (!isDesktop) {
-    return (
-      <Layout title="Пакеты" showBack showTabBar={false}>
-        {/* Subtitle */}
-        <div style={{ padding: "4px 20px", display: "flex", justifyContent: "center" }}>
-          <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500, color: "#52525B", textAlign: "center" }}>
-            Цена зависит от выбранной модели
-          </span>
-        </div>
+  useEffect(() => {
+    api.getProfile().then((p) => setPhotoCredits(p.photo_credits)).catch(() => {});
+  }, []);
 
-        {/* Model tabs */}
+  const content = (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: 24,
+      padding: isDesktop ? "32px 80px" : "16px 20px 24px 20px",
+      overflowY: "auto", flex: 1,
+    }}>
+      {/* Subtitle */}
+      <span style={{
+        fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A",
+      }}>
+        Выберите план, который подходит вам
+      </span>
+
+      {/* Token balance section */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 14,
+        padding: 16, borderRadius: 16,
+        background: "#18181B", border: "1px solid #27272A",
+      }}>
         <div style={{
-          display: "flex", gap: 8, padding: "12px 20px",
-          overflowX: "auto", scrollbarWidth: "none",
+          width: 44, height: 44, borderRadius: 12,
+          background: "#1A2E05", display: "flex",
+          alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>
-          {MODEL_TABS.map((tab) => {
-            const active = activeModel === tab;
-            return (
-              <button key={tab} onClick={() => { haptic(); setActiveModel(tab); }}
-                style={{
-                  padding: "8px 16px", borderRadius: 100, whiteSpace: "nowrap", flexShrink: 0,
-                  background: active ? "var(--accent)" : "var(--surface)",
-                  border: active ? "none" : "1px solid var(--border)",
-                }}>
-                <span style={{
-                  fontFamily: "var(--font-body)", fontSize: 13,
-                  fontWeight: active ? 600 : 500,
-                  color: active ? "#0A0A0A" : "var(--text-secondary)",
-                }}>{tab}</span>
-              </button>
-            );
-          })}
+          <Zap size={22} color="#C4F82A" />
         </div>
-
-        {/* Photo packages */}
-        <div style={{ padding: "16px 20px 0", display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Image size={18} color="var(--accent)" />
-            <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Фото</span>
-          </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            {PHOTO_PACKS.map((pack) => (
-              <div key={pack.count} style={{
-                flex: 1, padding: 16, borderRadius: 16,
-                background: "var(--surface)",
-                border: pack.best ? "2px solid var(--accent)" : "1px solid var(--border)",
-                display: "flex", flexDirection: "column", gap: 8,
-              }}>
-                {pack.best && (
-                  <div style={{
-                    alignSelf: "flex-start", padding: "3px 8px", borderRadius: 100,
-                    background: "var(--accent)",
-                  }}>
-                    <span style={{ fontFamily: "var(--font-body)", fontSize: 10, fontWeight: 700, color: "#0A0A0A" }}>Выгодно</span>
-                  </div>
-                )}
-                <span style={{ fontFamily: "var(--font-primary)", fontSize: 36, fontWeight: 800, color: "var(--text)" }}>{pack.count}</span>
-                <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 500, color: "var(--text-secondary)" }}>фото</span>
-                <span style={{ fontFamily: "var(--font-primary)", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{pack.price}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#52525B" }}>{pack.per}</span>
-                <button style={{
-                  height: 36, borderRadius: 10, width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: pack.best ? "var(--accent)" : "transparent",
-                  border: pack.best ? "none" : "1px solid var(--border)",
-                }}>
-                  <span style={{
-                    fontFamily: "var(--font-body)", fontSize: 13,
-                    fontWeight: pack.best ? 700 : 600,
-                    color: pack.best ? "#0A0A0A" : "var(--text-secondary)",
-                  }}>Купить</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Video packages */}
-        <div style={{ padding: "12px 20px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Video size={18} color="var(--accent)" />
-            <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Видео</span>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            {VIDEO_PACKS.map((pack) => (
-              <div key={pack.count} style={{
-                flex: 1, padding: "12px 10px", borderRadius: 16,
-                background: "var(--surface)",
-                border: pack.best ? "2px solid var(--accent)" : "1px solid var(--border)",
-                display: "flex", flexDirection: "column", alignItems: pack.best ? "center" : "flex-start", gap: 6,
-              }}>
-                {pack.discount && (
-                  <div style={{
-                    padding: "2px 8px", borderRadius: 100, background: "var(--accent)",
-                  }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#0A0A0A" }}>{pack.discount}</span>
-                  </div>
-                )}
-                <span style={{ fontFamily: "var(--font-primary)", fontSize: 24, fontWeight: 800, color: "var(--text)" }}>{pack.count}</span>
-                <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 500, color: "var(--text-secondary)" }}>видео</span>
-                <span style={{ fontFamily: "var(--font-primary)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{pack.price}</span>
-                <button style={{
-                  height: 32, borderRadius: 8, width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: pack.best ? "var(--accent)" : "transparent",
-                  border: pack.best ? "none" : "1px solid var(--border)",
-                }}>
-                  <span style={{
-                    fontFamily: "var(--font-body)", fontSize: 12,
-                    fontWeight: pack.best ? 700 : 600,
-                    color: pack.best ? "#0A0A0A" : "var(--text-secondary)",
-                  }}>Купить</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Note */}
-        <div style={{ display: "flex", justifyContent: "center", padding: "8px 20px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           <span style={{
-            fontFamily: "var(--font-body)", fontSize: 11, color: "#52525B",
-            textAlign: "center", maxWidth: 300,
+            fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "#FFFFFF",
           }}>
-            Цены указаны для Nano Banana. Переключи модель для актуальных цен.
+            {photoCredits} токенов
+          </span>
+          <span style={{
+            fontFamily: "var(--font-body)", fontSize: 12, color: "#71717A",
+            lineHeight: 1.4,
+          }}>
+            Токены расходуются на генерацию фото и видео
           </span>
         </div>
-      </Layout>
-    );
-  }
+      </div>
 
-  // DESKTOP - show subscription page with full pricing
-  return <Navigate to="/subscription" replace />;
+      {/* Subscriptions */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <span style={{
+          fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 600, color: "#FFFFFF",
+        }}>Подписка</span>
+
+        <div style={{
+          display: "flex", gap: 8,
+          ...(isDesktop ? {} : { overflowX: "auto", scrollbarWidth: "none" as const }),
+        }}>
+          {SUBSCRIPTIONS.map((plan) => (
+            <div key={plan.name} style={{
+              flex: isDesktop ? 1 : "none",
+              width: isDesktop ? undefined : 140,
+              flexShrink: 0,
+              display: "flex", flexDirection: "column", gap: 10,
+              padding: "14px 12px", borderRadius: 16,
+              background: "#18181B",
+              border: plan.highlight ? "1.5px solid #C4F82A" : "1px solid #27272A",
+            }}>
+              {/* Name row */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{
+                  fontFamily: "var(--font-primary)", fontSize: 14, fontWeight: 600, color: "#FFFFFF",
+                }}>{plan.name}</span>
+                {plan.badge && (
+                  <div style={{
+                    padding: "3px 8px", borderRadius: 6, background: "#C4F82A",
+                  }}>
+                    <span style={{
+                      fontFamily: "var(--font-primary)", fontSize: 9, fontWeight: 700, color: "#0A0A0A",
+                    }}>{plan.badge}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Price */}
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "#FFFFFF",
+              }}>{plan.price}</span>
+              <span style={{
+                fontFamily: "var(--font-body)", fontSize: 11, color: "#71717A",
+              }}>/мес</span>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: "#27272A", width: "100%" }} />
+
+              {/* Features */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                <span style={{
+                  fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 500, color: "#C4F82A",
+                }}>{plan.tokens}</span>
+                {plan.features.map((f) => (
+                  <span key={f} style={{
+                    fontFamily: "var(--font-body)", fontSize: 11, color: "#A1A1AA",
+                  }}>{f}</span>
+                ))}
+              </div>
+
+              {/* Button */}
+              <button
+                onClick={() => haptic()}
+                style={{
+                  height: 34, borderRadius: 8, width: "100%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: plan.highlight ? "#C4F82A" : "#27272A",
+                  border: "none", cursor: "pointer",
+                }}
+              >
+                <span style={{
+                  fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
+                  color: plan.highlight ? "#0A0A0A" : "#FFFFFF",
+                }}>Выбрать</span>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Add-on tokens */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <span style={{
+          fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 600, color: "#FFFFFF",
+        }}>Докупить токены</span>
+
+        {TOKEN_PACKS.map((pack) => (
+          <button
+            key={pack.tokens}
+            onClick={() => haptic()}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "14px 16px", borderRadius: 12,
+              background: "#18181B",
+              border: pack.highlight ? "1.5px solid #C4F82A" : "1px solid #27272A",
+              cursor: "pointer", width: "100%",
+              textAlign: "left",
+            }}
+          >
+            <Coins size={18} color={pack.highlight ? "#C4F82A" : "#71717A"} />
+            <span style={{
+              fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "#FFFFFF",
+            }}>{pack.tokens}</span>
+            {pack.badge && (
+              <div style={{
+                padding: "2px 6px", borderRadius: 4, background: "#C4F82A",
+              }}>
+                <span style={{
+                  fontFamily: "var(--font-primary)", fontSize: 9, fontWeight: 700, color: "#0A0A0A",
+                }}>{pack.badge}</span>
+              </div>
+            )}
+            <div style={{ flex: 1 }} />
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
+              color: pack.highlight ? "#C4F82A" : "#FFFFFF",
+            }}>{pack.price}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Footer note */}
+      <div style={{ display: "flex", justifyContent: "center" }}>
+        <span style={{
+          fontFamily: "var(--font-body)", fontSize: 11, color: "#52525B",
+          textAlign: "center", lineHeight: 1.5, maxWidth: 295,
+        }}>
+          Подписка продлевается автоматически. Отменить можно в любой момент.
+        </span>
+      </div>
+    </div>
+  );
+
+  return (
+    <Layout title="Тарифы" showBack showTabBar={false}>
+      {content}
+    </Layout>
+  );
 }
