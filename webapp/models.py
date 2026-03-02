@@ -90,3 +90,23 @@ class GenerateStatusOut(BaseModel):
     status: str
     result_url: Optional[str] = None
     error: Optional[str] = None
+
+
+class CreatePaymentRequest(BaseModel):
+    product_type: str  # 'subscription' | 'token_pack'
+    product_name: str
+    amount: float
+    tokens: int
+
+
+class CreatePaymentResponse(BaseModel):
+    payment_url: str
+    order_id: str
+
+
+class PaymentStatusOut(BaseModel):
+    order_id: str
+    status: str
+    tokens: int
+    created_at: str
+    paid_at: Optional[str] = None

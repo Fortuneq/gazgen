@@ -96,6 +96,15 @@ export const api = {
   getGenerationStatus: (taskId: string) =>
     request<import("./types").GenerateStatus>(`/generate/${taskId}/status`),
 
+  // Payments
+  createPayment: (data: import("./types").CreatePaymentRequest) =>
+    request<import("./types").CreatePaymentResponse>("/payments/create", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getPaymentStatus: (orderId: string) =>
+    request<import("./types").PaymentStatus>(`/payments/status/${encodeURIComponent(orderId)}`),
+
   // Profile
   getProfile: () => request<import("./types").UserProfile>("/profile"),
 

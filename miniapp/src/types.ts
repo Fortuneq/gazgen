@@ -79,6 +79,26 @@ export interface UserProfile {
   video_credits: number;
 }
 
+export interface CreatePaymentRequest {
+  product_type: "subscription" | "token_pack";
+  product_name: string;
+  amount: number;
+  tokens: number;
+}
+
+export interface CreatePaymentResponse {
+  payment_url: string;
+  order_id: string;
+}
+
+export interface PaymentStatus {
+  order_id: string;
+  status: string;
+  tokens: number;
+  created_at: string;
+  paid_at?: string;
+}
+
 export type PromptMode = "original" | "custom";
 export type AspectRatio = "1:1" | "16:9" | "9:16";
 export type AnimeDuration = "3" | "5" | "10" | "15";

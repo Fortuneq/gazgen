@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from webapp.db import init_pool, close_pool
-from webapp.routers import categories, posts, images, search, generate, tags, profile
+from webapp.routers import categories, posts, images, search, generate, tags, profile, payments
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.include_router(search.router, prefix="/api")
 app.include_router(generate.router, prefix="/api")
 app.include_router(tags.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
+app.include_router(payments.router, prefix="/api")
 
 # Serve frontend static files (built React app) — MUST be last, catches all unmatched routes
 static_dir = Path(__file__).parent.parent / "static"

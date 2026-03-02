@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic } from "../telegram";
@@ -54,6 +55,7 @@ const TOKEN_PACKS: TokenPack[] = [
 
 export default function PricingPage() {
   const isDesktop = useIsDesktop();
+  const navigate = useNavigate();
   const [photoCredits, setPhotoCredits] = useState(0);
 
   useEffect(() => {
@@ -162,7 +164,7 @@ export default function PricingPage() {
 
               {/* Button */}
               <button
-                onClick={() => haptic()}
+                onClick={() => { haptic(); navigate("/subscription"); }}
                 style={{
                   height: 34, borderRadius: 8, width: "100%",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -189,7 +191,7 @@ export default function PricingPage() {
         {TOKEN_PACKS.map((pack) => (
           <button
             key={pack.tokens}
-            onClick={() => haptic()}
+            onClick={() => { haptic(); navigate("/subscription"); }}
             style={{
               display: "flex", alignItems: "center", gap: 8,
               padding: "14px 16px", borderRadius: 12,
@@ -227,7 +229,7 @@ export default function PricingPage() {
           fontFamily: "var(--font-body)", fontSize: 11, color: "#52525B",
           textAlign: "center", lineHeight: 1.5, maxWidth: 295,
         }}>
-          Подписка продлевается автоматически. Отменить можно в любой момент.
+          Оплата криптовалютой через CryptoCloud. BTC, ETH, USDT и другие.
         </span>
       </div>
     </div>

@@ -1,57 +1,56 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
-import { haptic } from "../telegram";
-import { Zap, Coins, CreditCard, ArrowLeft, Timer } from "lucide-react";
+import { haptic, getTelegram } from "../telegram";
+import { api } from "../api";
+import { Zap, Coins, ArrowLeft, ExternalLink, CheckCircle, Loader2 } from "lucide-react";
 
 interface SubPlan {
   name: string;
   price: string;
+  priceNum: number;
   period: string;
   tokens: string;
+  tokensNum: number;
   features: string[];
   highlighted: boolean;
   badge?: string;
 }
 
 const PLANS: SubPlan[] = [
-  { name: "Старт", price: "299₽", period: "/мес", tokens: "50 токенов", features: ["Базовые модели"], highlighted: false },
-  { name: "Про", price: "699₽", period: "/мес", tokens: "200 токенов", features: ["Все модели", "Приоритет"], highlighted: true, badge: "ХИТ" },
-  { name: "Ультра", price: "1490₽", period: "/мес", tokens: "500 токенов", features: ["Все модели", "Приоритет", "4K экспорт"], highlighted: false },
+  { name: "Старт", price: "299₽", priceNum: 299, period: "/мес", tokens: "50 токенов", tokensNum: 50, features: ["Базовые модели"], highlighted: false },
+  { name: "Про", price: "699₽", priceNum: 699, period: "/мес", tokens: "200 токенов", tokensNum: 200, features: ["Все модели", "Приоритет"], highlighted: true, badge: "ХИТ" },
+  { name: "Ультра", price: "1490₽", priceNum: 1490, period: "/мес", tokens: "500 токенов", tokensNum: 500, features: ["Все модели", "Приоритет", "4K экспорт"], highlighted: false },
 ];
 
 interface TokenPack {
   amount: string;
   price: string;
+  priceNum: number;
+  tokensNum: number;
   highlighted: boolean;
   badge?: string;
 }
 
 const TOKEN_PACKS: TokenPack[] = [
-  { amount: "50 токенов", price: "199₽", highlighted: false },
-  { amount: "150 токенов", price: "499₽", highlighted: true, badge: "ВЫГОДНО" },
-  { amount: "500 токенов", price: "1 490₽", highlighted: false },
+  { amount: "50 токенов", price: "199₽", priceNum: 199, tokensNum: 50, highlighted: false },
+  { amount: "150 токенов", price: "499₽", priceNum: 499, tokensNum: 150, highlighted: true, badge: "ВЫГОДНО" },
+  { amount: "500 токенов", price: "1 490₽", priceNum: 1490, tokensNum: 500, highlighted: false },
 ];
 
 type ModalType = null | { kind: "plan"; plan: SubPlan } | { kind: "tokens"; pack: TokenPack };
 
-/* ── Payment QR Screen (matches design frame KQ2dL) ── */
-
-function useCountdown(seconds: number) {
-  const [left, setLeft] = useState(seconds);
-  useEffect(() => {
-    if (left <= 0) return;
-    const t = setTimeout(() => setLeft((l) => l - 1), 1000);
-    return () => clearTimeout(t);
-  }, [left]);
-  const mm = String(Math.floor(left / 60)).padStart(2, "0");
-  const ss = String(left % 60).padStart(2, "0");
-  return `${mm}:${ss}`;
-}
+type PaymentState =
+  | { step: "idle" }
+  | { step: "creating" }
+  | { step: "awaiting"; paymentUrl: string; orderId: string }
+  | { step: "success"; tokens: number }
+  | { step: "error"; message: string };
 
 function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onClose: () => void }) {
   const isDesktop = useIsDesktop();
-  const timer = useCountdown(600);
+  const [payState, setPayState] = useState<PaymentState>({ step: "idle" });
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const planLabel = modal.kind === "plan"
     ? `${modal.plan.name} · подписка`
@@ -59,15 +58,108 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
   const period = modal.kind === "plan" ? "1 месяц" : "Единоразово";
   const tokens = modal.kind === "plan" ? modal.plan.tokens : modal.pack.amount;
   const price = modal.kind === "plan" ? modal.plan.price : modal.pack.price;
-  // Price for display in total — strip ₽ to reformat with space
   const totalPrice = price.replace("₽", " ₽");
+  const priceNum = modal.kind === "plan" ? modal.plan.priceNum : modal.pack.priceNum;
+  const tokensNum = modal.kind === "plan" ? modal.plan.tokensNum : modal.pack.tokensNum;
+  const productType = modal.kind === "plan" ? "subscription" as const : "token_pack" as const;
+  const productName = modal.kind === "plan" ? modal.plan.name : modal.pack.amount;
 
-  const handleCardPay = useCallback(() => {
-    haptic("medium");
-    // TODO: Integrate real payment
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
-  /* ── Shared payment card ── */
+  const startPolling = useCallback((orderId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await api.getPaymentStatus(orderId);
+        if (status.status === "paid") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          haptic("heavy");
+          setPayState({ step: "success", tokens: status.tokens });
+        }
+      } catch {
+        // Keep polling
+      }
+    }, 3000);
+  }, []);
+
+  const handlePay = useCallback(async () => {
+    haptic("medium");
+    setPayState({ step: "creating" });
+
+    try {
+      const result = await api.createPayment({
+        product_type: productType,
+        product_name: productName,
+        amount: priceNum,
+        tokens: tokensNum,
+      });
+
+      setPayState({ step: "awaiting", paymentUrl: result.payment_url, orderId: result.order_id });
+      startPolling(result.order_id);
+    } catch {
+      setPayState({ step: "error", message: "Не удалось создать платёж. Попробуйте снова." });
+    }
+  }, [priceNum, tokensNum, productType, productName, startPolling]);
+
+  const openPaymentLink = useCallback(() => {
+    if (payState.step !== "awaiting") return;
+    haptic("medium");
+    const tg = getTelegram();
+    if (tg) {
+      (tg as any).openLink?.(payState.paymentUrl) ?? window.open(payState.paymentUrl, "_blank");
+    } else {
+      window.open(payState.paymentUrl, "_blank");
+    }
+  }, [payState]);
+
+  /* ── Success screen ── */
+  if (payState.step === "success") {
+    return (
+      <Layout showTabBar={false}>
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", flex: 1, padding: "32px 24px", gap: 24,
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%",
+            background: "rgba(196, 248, 42, 0.15)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <CheckCircle size={40} color="#C4F82A" />
+          </div>
+          <span style={{
+            fontFamily: "var(--font-primary)", fontSize: 24, fontWeight: 700, color: "#FFFFFF",
+            textAlign: "center",
+          }}>Оплата прошла!</span>
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "#C4F82A",
+          }}>+{payState.tokens} токенов</span>
+          <span style={{
+            fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A",
+            textAlign: "center", maxWidth: 320,
+          }}>
+            Токены начислены на ваш баланс. Можете приступать к генерации!
+          </span>
+          <button onClick={onClose} style={{
+            height: 48, borderRadius: 12, width: "100%", maxWidth: 320,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "#C4F82A", border: "none", cursor: "pointer",
+          }}>
+            <span style={{
+              fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 600, color: "#0A0A0A",
+            }}>Отлично</span>
+          </button>
+        </div>
+      </Layout>
+    );
+  }
+
+  /* ── Payment card ── */
   const paymentCard = (
     <div style={{
       borderRadius: 20, background: "#18181B",
@@ -90,65 +182,11 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
         </div>
         <span style={{
           fontFamily: "var(--font-primary)", fontSize: 24, fontWeight: 700, color: "#FFFFFF",
-        }}>Оплата</span>
+        }}>Оплата криптой</span>
         <span style={{
           fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A",
           textAlign: "center", maxWidth: 380,
-        }}>Отсканируйте QR-код для оплаты через СберБанк</span>
-      </div>
-
-      {/* Divider */}
-      <div style={{ height: 1, background: "#27272A" }} />
-
-      {/* QR Section */}
-      <div style={{
-        display: "flex", flexDirection: "column", alignItems: "center",
-        gap: 14, padding: isDesktop ? "20px 32px" : "20px 24px",
-      }}>
-        {/* QR Code placeholder */}
-        <div style={{
-          width: isDesktop ? 220 : 200, height: isDesktop ? 220 : 200,
-          borderRadius: 12, background: "#FFFFFF",
-          border: "2px solid #21A038", padding: 10,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <div style={{
-            width: "100%", height: "100%", borderRadius: 4,
-            background: "#F0F0F0",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="140" height="140" viewBox="0 0 140 140">
-              {/* Simple QR-code-like pattern */}
-              {Array.from({ length: 14 }, (_, r) =>
-                Array.from({ length: 14 }, (_, c) => {
-                  const isCorner = (r < 3 && c < 3) || (r < 3 && c > 10) || (r > 10 && c < 3);
-                  const show = isCorner || Math.random() > 0.45;
-                  return show ? (
-                    <rect key={`${r}-${c}`} x={c * 10} y={r * 10} width={9} height={9} rx={1} fill="#000" />
-                  ) : null;
-                })
-              )}
-            </svg>
-          </div>
-        </div>
-
-        {/* SberPay brand */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 20, height: 20, borderRadius: "50%", background: "#21A038",
-          }} />
-          <span style={{
-            fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 600, color: "#FFFFFF",
-          }}>SberPay</span>
-        </div>
-
-        {/* Timer */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Timer size={16} color="#71717A" />
-          <span style={{
-            fontFamily: "var(--font-body)", fontSize: 13, color: "#71717A",
-          }}>QR-код действителен {timer}</span>
-        </div>
+        }}>Оплата через CryptoCloud — BTC, ETH, USDT и другие криптовалюты</span>
       </div>
 
       {/* Divider */}
@@ -157,84 +195,124 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
       {/* Details Section */}
       <div style={{
         display: "flex", flexDirection: "column", gap: 12,
-        padding: isDesktop ? "14px 32px 16px" : "14px 24px 16px",
+        padding: isDesktop ? "20px 32px" : "20px 24px",
       }}>
-        {/* Row 1: Тариф */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A" }}>Тариф</span>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "#FFFFFF" }}>{planLabel}</span>
         </div>
-        {/* Row 2: Период */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A" }}>Период</span>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "#FFFFFF" }}>{period}</span>
         </div>
-        {/* Row 3: Токены */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A" }}>Токены</span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "#C4F82A" }}>{tokens}</span>
         </div>
 
-        {/* Divider */}
         <div style={{ height: 1, background: "#27272A" }} />
 
-        {/* Total row */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: "var(--font-primary)", fontSize: 18, fontWeight: 700, color: "#FFFFFF" }}>Итого</span>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "#FFFFFF" }}>{totalPrice}</span>
         </div>
       </div>
 
-      {/* Bottom: Card payment option */}
+      {/* Divider */}
+      <div style={{ height: 1, background: "#27272A" }} />
+
+      {/* Action Section */}
       <div style={{
         display: "flex", flexDirection: "column", alignItems: "center",
-        gap: 10, padding: isDesktop ? "12px 32px 20px" : "12px 24px 20px",
+        gap: 12, padding: isDesktop ? "20px 32px" : "20px 24px",
       }}>
-        <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#71717A" }}>
-          Или оплатите картой
-        </span>
-        <button onClick={handleCardPay} style={{
-          height: 44, borderRadius: 10, width: "100%",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          background: "#27272A", border: "none", cursor: "pointer",
-          transition: "opacity 0.15s",
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
-        >
-          <CreditCard size={18} color="#FFFFFF" />
-          <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "#FFFFFF" }}>
-            Оплатить картой
-          </span>
-        </button>
+        {payState.step === "idle" && (
+          <button onClick={handlePay} style={{
+            height: 48, borderRadius: 12, width: "100%",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            background: "#C4F82A", border: "none", cursor: "pointer",
+            transition: "opacity 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+          >
+            <Coins size={18} color="#0A0A0A" />
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 600, color: "#0A0A0A" }}>
+              Оплатить криптой
+            </span>
+          </button>
+        )}
+
+        {payState.step === "creating" && (
+          <div style={{
+            height: 48, borderRadius: 12, width: "100%",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            background: "#27272A", border: "none",
+          }}>
+            <Loader2 size={18} color="#71717A" style={{ animation: "spin 1s linear infinite" }} />
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 600, color: "#71717A" }}>
+              Создаём счёт...
+            </span>
+          </div>
+        )}
+
+        {payState.step === "awaiting" && (
+          <>
+            <button onClick={openPaymentLink} style={{
+              height: 48, borderRadius: 12, width: "100%",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              background: "#C4F82A", border: "none", cursor: "pointer",
+              transition: "opacity 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+            >
+              <ExternalLink size={18} color="#0A0A0A" />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 600, color: "#0A0A0A" }}>
+                Перейти к оплате
+              </span>
+            </button>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <Loader2 size={14} color="#71717A" style={{ animation: "spin 1s linear infinite" }} />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#71717A" }}>
+                Ожидаем подтверждение оплаты...
+              </span>
+            </div>
+          </>
+        )}
+
+        {payState.step === "error" && (
+          <>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#EF4444" }}>
+              {payState.message}
+            </span>
+            <button onClick={handlePay} style={{
+              height: 48, borderRadius: 12, width: "100%",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              background: "#C4F82A", border: "none", cursor: "pointer",
+            }}>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 600, color: "#0A0A0A" }}>
+                Попробовать снова
+              </span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 
-  /* ── Desktop: full-page layout ── */
-  if (isDesktop) {
-    return (
-      <Layout showTabBar={false}>
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flex: 1, padding: "32px 0",
-        }}>
-          {paymentCard}
-        </div>
-      </Layout>
-    );
-  }
-
-  /* ── Mobile: full-page layout ── */
   return (
     <Layout showTabBar={false}>
       <div style={{
         display: "flex", flexDirection: "column", alignItems: "center",
         justifyContent: "center",
-        flex: 1, padding: "16px 16px 24px",
+        flex: 1, padding: isDesktop ? "32px 0" : "16px 16px 24px",
       }}>
         {paymentCard}
       </div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </Layout>
   );
 }
@@ -242,14 +320,26 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
 export default function SubscriptionPage() {
   const isDesktop = useIsDesktop();
   const [modal, setModal] = useState<ModalType>(null);
+  const [photoCredits, setPhotoCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getProfile().then((p) => setPhotoCredits(p.photo_credits)).catch(() => {});
+  }, []);
 
   const openPlan = (plan: SubPlan) => { haptic("medium"); setModal({ kind: "plan", plan }); };
   const openTokens = (pack: TokenPack) => { haptic("medium"); setModal({ kind: "tokens", pack }); };
 
-  // Payment screen replaces the whole page
+  const handleClose = () => {
+    setModal(null);
+    // Refresh balance after payment
+    api.getProfile().then((p) => setPhotoCredits(p.photo_credits)).catch(() => {});
+  };
+
   if (modal) {
-    return <PaymentScreen modal={modal} onClose={() => setModal(null)} />;
+    return <PaymentScreen modal={modal} onClose={handleClose} />;
   }
+
+  const balanceDisplay = photoCredits !== null ? `${photoCredits} токенов` : "...";
 
   // DESKTOP
   if (isDesktop) {
@@ -274,7 +364,7 @@ export default function SubscriptionPage() {
                 <Coins size={20} color="var(--accent)" />
                 <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "var(--text-secondary)" }}>Баланс токенов</span>
               </div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--accent)" }}>247 токенов</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--accent)" }}>{balanceDisplay}</span>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -376,7 +466,7 @@ export default function SubscriptionPage() {
               fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-muted)",
               textAlign: "center", alignSelf: "center", maxWidth: 500,
             }}>
-              Подписка продлевается автоматически. Вы можете отменить в любой момент.
+              Оплата криптовалютой через CryptoCloud. Поддерживаются BTC, ETH, USDT и другие.
             </span>
           </div>
         </div>
@@ -407,7 +497,7 @@ export default function SubscriptionPage() {
             <Zap size={22} color="var(--accent)" />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>47 токенов</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{balanceDisplay}</span>
             <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "var(--text-muted)", lineHeight: 1.4 }}>
               Токены расходуются на генерацию фото и видео
             </span>
@@ -497,7 +587,7 @@ export default function SubscriptionPage() {
             fontFamily: "var(--font-body)", fontSize: 11, color: "#52525B",
             textAlign: "center", lineHeight: 1.5, maxWidth: 295,
           }}>
-            Подписка продлевается автоматически. Отменить можно в любой момент.
+            Оплата криптовалютой через CryptoCloud. BTC, ETH, USDT и другие.
           </span>
         </div>
       </div>
