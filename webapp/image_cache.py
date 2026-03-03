@@ -52,5 +52,5 @@ class ImageCache:
         return len(self._cache)
 
 
-# Singleton instance
-image_cache = ImageCache()
+# Singleton instance — 2048 entries covers ~10 images × ~13 categories + ~10 tags + covers
+image_cache = ImageCache(max_size=2048)

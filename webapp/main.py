@@ -65,6 +65,46 @@ async def _warmup_cover_cache():
                 row["content_type"] or "image/jpeg",
             )
 
+    # Pre-load first 10 result images per category (what users see on home/feed)
+    for cr in cat_rows:
+        name = cr["name"]
+        img_rows = await pool.fetch(
+            """
+            SELECT i.post_id, i.image_data, i.content_type
+            FROM images i JOIN posts p ON i.post_id = p.id
+            WHERE p.model_name = $1 AND i.image_type = 'result'
+            ORDER BY p.id DESC LIMIT 10
+            """,
+            name,
+        )
+        for ir in img_rows:
+            if ir["image_data"]:
+                image_cache.put(
+                    f"result:{ir['post_id']}",
+                    bytes(ir["image_data"]),
+                    ir["content_type"] or "image/jpeg",
+                )
+
+    # Pre-load first 10 result images per tag
+    for tr in tag_rows:
+        tag_name = tr["tag"]
+        img_rows = await pool.fetch(
+            """
+            SELECT i.post_id, i.image_data, i.content_type
+            FROM images i JOIN posts p ON p.id = i.post_id
+            WHERE $1 = ANY(p.tags) AND i.image_type = 'result'
+            ORDER BY p.id DESC LIMIT 10
+            """,
+            tag_name,
+        )
+        for ir in img_rows:
+            if ir["image_data"]:
+                image_cache.put(
+                    f"result:{ir['post_id']}",
+                    bytes(ir["image_data"]),
+                    ir["content_type"] or "image/jpeg",
+                )
+
     logger.info("Image cache warmed up: %d entries", image_cache.size)
 
 

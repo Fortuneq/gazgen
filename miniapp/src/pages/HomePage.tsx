@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { ImageGrid } from "../components/ImageGrid";
@@ -6,9 +6,10 @@ import { api } from "../api";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic } from "../telegram";
 import type { Post, Tag } from "../types";
-import { Sparkles, Play, ChevronRight, Clapperboard } from "lucide-react";
+import { Sparkles, Play, ChevronRight, Clapperboard, Loader } from "lucide-react";
 
 const HIDDEN_TAGS = new Set(["male", "female"]);
+const PAGE_SIZE = 20;
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -17,16 +18,22 @@ export default function HomePage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(() => {
     setLoading(true);
     setError(false);
     Promise.all([
-      api.getPosts({ limit: 20 }),
+      api.getPosts({ limit: PAGE_SIZE }),
       api.getTags(),
     ]).then(([postsData, tagsData]) => {
       setPosts(postsData.items);
       setTags(tagsData.filter((t) => !HIDDEN_TAGS.has(t.name)));
+      setHasMore(postsData.has_more);
+      setPage(1);
     }).catch((err) => {
       console.error(err);
       setError(true);
@@ -34,6 +41,34 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  const loadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    api.getPosts({ page: nextPage, limit: PAGE_SIZE })
+      .then((data) => {
+        setPosts((prev) => [...prev, ...data.items]);
+        setHasMore(data.has_more);
+        setPage(nextPage);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMore(false));
+  }, [page, hasMore, loadingMore]);
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) loadMore();
+      },
+      { rootMargin: "400px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   const handlePostClick = useCallback((post: Post) => {
     haptic();
@@ -232,6 +267,20 @@ export default function HomePage() {
               }}>Попробовать</span>
             </div>
           </div>
+
+          {/* Infinite grid */}
+          <ImageGrid
+            posts={posts}
+            columns={4}
+            gap={16}
+            onPostClick={handlePostClick}
+          />
+          <div ref={sentinelRef} style={{ height: 1 }} />
+          {loadingMore && (
+            <div style={{ display: "flex", justifyContent: "center", padding: "16px 0" }}>
+              <Loader size={24} color="#A1A1AA" style={{ animation: "spin 1s linear infinite" }} />
+            </div>
+          )}
         </div>
       </Layout>
     );
@@ -359,7 +408,7 @@ export default function HomePage() {
         </button>
       </div>
 
-      {/* Discovery Grid */}
+      {/* Discovery Grid — infinite scroll */}
       <div style={{ padding: "8px 0", overflow: "hidden" }}>
         <ImageGrid
           posts={posts}
@@ -367,6 +416,18 @@ export default function HomePage() {
           gap={8}
           onPostClick={handlePostClick}
         />
+        <div ref={sentinelRef} style={{ height: 1 }} />
+        {loadingMore && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "20px 0" }}>
+            <Loader size={22} color="#A1A1AA" style={{ animation: "spin 1s linear infinite" }} />
+          </div>
+        )}
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     </Layout>
   );
