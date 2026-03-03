@@ -18,7 +18,11 @@ from bot.db_postgres import (
     get_reference_images,
     get_post_by_id,
     get_connection,
-    release_connection
+    release_connection,
+    ensure_bot_user,
+    get_user_credits,
+    get_model_cost,
+    check_and_deduct_credits,
 )
 
 load_dotenv()
@@ -45,5 +49,9 @@ __all__ = [
     'search_similar_posts',
     'get_result_image',
     'get_reference_images',
-    'get_post_by_id'
+    'get_post_by_id',
+    'ensure_bot_user',
+    'get_user_credits',
+    'get_model_cost',
+    'check_and_deduct_credits',
 ]

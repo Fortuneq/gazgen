@@ -335,6 +335,100 @@ def get_post_with_images(post_id: int) -> Optional[Dict]:
         release_connection(conn)
 
 
+def ensure_bot_user(telegram_id: int):
+    """Ensure user row exists in users table (with 0 credits by default)."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO users (telegram_id, photo_credits, video_credits) "
+                "VALUES (%s, 0, 0) ON CONFLICT (telegram_id) DO NOTHING",
+                (telegram_id,)
+            )
+            conn.commit()
+    finally:
+        release_connection(conn)
+
+
+def get_user_credits(telegram_id: int) -> int:
+    """Get user's current photo credit balance."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT photo_credits FROM users WHERE telegram_id = %s",
+                (telegram_id,)
+            )
+            row = cur.fetchone()
+            return row[0] if row else 0
+    finally:
+        release_connection(conn)
+
+
+def get_model_cost(model_key: str) -> int:
+    """Get credit cost for a model from model_prices table, default 1."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT credit_cost FROM model_prices WHERE model_key = %s",
+                (model_key,)
+            )
+            row = cur.fetchone()
+            return row[0] if row else 1
+    finally:
+        release_connection(conn)
+
+
+def check_and_deduct_credits(telegram_id: int, model_key: str, task_id: str = "") -> tuple:
+    """Check credits and deduct if sufficient.
+
+    Returns (success, cost, remaining).
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cost = get_model_cost(model_key)
+
+            # Ensure user exists
+            cur.execute(
+                "INSERT INTO users (telegram_id, photo_credits, video_credits) "
+                "VALUES (%s, 0, 0) ON CONFLICT (telegram_id) DO NOTHING",
+                (telegram_id,)
+            )
+
+            cur.execute(
+                "SELECT photo_credits FROM users WHERE telegram_id = %s",
+                (telegram_id,)
+            )
+            row = cur.fetchone()
+            balance = row[0] if row else 0
+
+            if balance < cost:
+                conn.commit()
+                return (False, cost, balance)
+
+            # Deduct credits
+            cur.execute(
+                "UPDATE users SET photo_credits = photo_credits - %s "
+                "WHERE telegram_id = %s AND photo_credits >= %s",
+                (cost, telegram_id, cost)
+            )
+
+            # Log transaction
+            cur.execute(
+                "INSERT INTO credit_transactions "
+                "(telegram_id, credit_type, amount, reason, task_id) "
+                "VALUES (%s, 'photo', %s, 'generation', %s)",
+                (telegram_id, -cost, task_id)
+            )
+
+            conn.commit()
+            return (True, cost, balance - cost)
+    finally:
+        release_connection(conn)
+
+
 def close_pool():
     """Close all connections in the pool"""
     global _pool

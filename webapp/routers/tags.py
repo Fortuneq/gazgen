@@ -3,6 +3,7 @@ from fastapi.responses import Response
 
 from webapp.db import get_pool
 from webapp.models import TagOut
+from webapp.image_cache import image_cache
 
 router = APIRouter()
 
@@ -51,6 +52,14 @@ async def list_tags():
 
 @router.get("/tags/{tag_name}/cover")
 async def tag_cover(tag_name: str):
+    cache_key = f"tag_cover:{tag_name}"
+    cached = image_cache.get(cache_key)
+    if cached:
+        return Response(
+            content=cached[0], media_type=cached[1],
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     pool = get_pool()
     row = await pool.fetchrow(
         """
@@ -65,8 +74,11 @@ async def tag_cover(tag_name: str):
     )
     if not row:
         raise HTTPException(status_code=404, detail="No cover for tag")
+
+    data = bytes(row["image_data"])
+    media = row["content_type"] or "image/jpeg"
+    image_cache.put(cache_key, data, media)
     return Response(
-        content=bytes(row["image_data"]),
-        media_type=row["content_type"] or "image/jpeg",
+        content=data, media_type=media,
         headers={"Cache-Control": "public, max-age=86400"},
     )

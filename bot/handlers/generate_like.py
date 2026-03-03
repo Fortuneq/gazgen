@@ -16,7 +16,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.database import get_post_by_id, get_category_emoji, get_reference_images
+from bot.database import get_post_by_id, get_category_emoji, get_reference_images, check_and_deduct_credits
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -48,6 +48,32 @@ CATEGORY_TO_MODEL = {
     "nano_orange": "seedream/4.5-text-to-image",
     "nano_pineapple": "seedream/4.5-text-to-image",
 }
+
+# Reverse mapping: kie model_id → our model_key (for credit lookup)
+_KIE_MODEL_TO_KEY = {
+    "nano-banana-pro": "banana",
+    "google/nano-banana": "nano_banana",
+    "seedream/4.5-text-to-image": "seedream",
+}
+
+
+def _resolve_model_key(category: str) -> str:
+    """Resolve category to our model_key for credit pricing."""
+    category_lower = category.lower().replace(" ", "_")
+    model_id = CATEGORY_TO_MODEL.get(category_lower, "nano-banana-pro")
+    return _KIE_MODEL_TO_KEY.get(model_id, "banana")
+
+
+def _insufficient_credits_keyboard():
+    builder = InlineKeyboardBuilder()
+    miniapp_url = os.getenv("MINIAPP_URL")
+    if miniapp_url:
+        from aiogram.types import WebAppInfo
+        pricing_url = miniapp_url.rstrip("/") + "/pricing"
+        builder.button(text="💰 Купить кредиты", web_app=WebAppInfo(url=pricing_url))
+    builder.button(text="🏠 Главное меню", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
 
 
 class GenerateLikeState(StatesGroup):
@@ -250,7 +276,7 @@ async def use_original_references(callback: CallbackQuery, state: FSMContext):
     )
 
     # Переходим к генерации
-    await _proceed_to_generation(callback.message, state)
+    await _proceed_to_generation(callback.message, state, telegram_id=callback.from_user.id)
     await callback.answer()
 
 
@@ -265,7 +291,7 @@ async def use_no_references(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer("✅ Генерация будет без референсов", parse_mode="HTML")
 
     # Переходим к генерации
-    await _proceed_to_generation(callback.message, state)
+    await _proceed_to_generation(callback.message, state, telegram_id=callback.from_user.id)
     await callback.answer()
 
 
@@ -335,7 +361,7 @@ async def finish_reference_upload(callback: CallbackQuery, state: FSMContext):
     )
 
     # Переходим к генерации
-    await _proceed_to_generation(callback.message, state)
+    await _proceed_to_generation(callback.message, state, telegram_id=callback.from_user.id)
     await callback.answer()
 
 
@@ -443,7 +469,7 @@ async def _poll_standard_task_status(task_id: str) -> str:
     raise TimeoutError("Генерация заняла слишком много времени. Попробуйте позже.")
 
 
-async def _proceed_to_generation(message, state: FSMContext):
+async def _proceed_to_generation(message, state: FSMContext, telegram_id: int = None):
     """
     Начинаем генерацию изображения с использованием kie.ai API
     """
@@ -460,8 +486,24 @@ async def _proceed_to_generation(message, state: FSMContext):
     # Определяем модель для генерации
     category_lower = category.lower().replace(" ", "_")
     model_id = CATEGORY_TO_MODEL.get(category_lower, "nano-banana-pro")
+    model_key = _resolve_model_key(category)
 
-    logger.info(f"Category: {category}, Model: {model_id}")
+    logger.info(f"Category: {category}, Model: {model_id}, ModelKey: {model_key}")
+
+    # Check and deduct credits
+    if telegram_id:
+        success, cost, remaining = check_and_deduct_credits(telegram_id, model_key)
+        if not success:
+            await state.clear()
+            await message.answer(
+                f"❌ <b>Недостаточно кредитов</b>\n\n"
+                f"Для генерации нужно <b>{cost}</b> кредитов.\n"
+                f"Ваш баланс: <b>{remaining}</b> кредитов.\n\n"
+                f"Пополните баланс в приложении 👇",
+                parse_mode="HTML",
+                reply_markup=_insufficient_credits_keyboard(),
+            )
+            return
 
     # Очищаем state
     await state.clear()

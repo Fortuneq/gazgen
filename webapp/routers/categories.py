@@ -3,6 +3,7 @@ from fastapi.responses import Response
 from webapp.db import get_pool
 from webapp.config import get_category_emoji
 from webapp.models import CategoryOut
+from webapp.image_cache import image_cache
 
 router = APIRouter()
 
@@ -25,6 +26,14 @@ async def list_categories():
 
 @router.get("/categories/{name}/cover")
 async def category_cover(name: str):
+    cache_key = f"cat_cover:{name}"
+    cached = image_cache.get(cache_key)
+    if cached:
+        return Response(
+            content=cached[0], media_type=cached[1],
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     pool = get_pool()
     row = await pool.fetchrow(
         """
@@ -40,9 +49,10 @@ async def category_cover(name: str):
     if not row or not row["image_data"]:
         raise HTTPException(status_code=404, detail="Cover not found")
 
+    data = bytes(row["image_data"])
     media = row["content_type"] or "image/jpeg"
+    image_cache.put(cache_key, data, media)
     return Response(
-        content=bytes(row["image_data"]),
-        media_type=media,
+        content=data, media_type=media,
         headers={"Cache-Control": "public, max-age=86400"},
     )

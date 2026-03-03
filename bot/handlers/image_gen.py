@@ -27,6 +27,8 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from bot.database import check_and_deduct_credits
+
 router = Router()
 logger = logging.getLogger(__name__)
 
@@ -249,6 +251,18 @@ def _ratio_keyboard(model_key: str) -> InlineKeyboardMarkup:
 def _after_gen_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="🎨 Сгенерировать ещё", callback_data="imggen:start")
+    builder.button(text="🏠 Главное меню", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def _insufficient_credits_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    miniapp_url = os.getenv("MINIAPP_URL")
+    if miniapp_url:
+        from aiogram.types import WebAppInfo
+        pricing_url = miniapp_url.rstrip("/") + "/pricing"
+        builder.button(text="💰 Купить кредиты", web_app=WebAppInfo(url=pricing_url))
     builder.button(text="🏠 Главное меню", callback_data="menu:main")
     builder.adjust(1)
     return builder.as_markup()
@@ -531,6 +545,22 @@ async def imggen_got_ratio(callback: CallbackQuery, state: FSMContext):
     await state.clear()
 
     model_label = MODELS[model_key]["label"]
+
+    # Check and deduct credits
+    success, cost, remaining = check_and_deduct_credits(
+        callback.from_user.id, model_key
+    )
+    if not success:
+        await callback.message.edit_text(
+            f"❌ <b>Недостаточно кредитов</b>\n\n"
+            f"Для генерации с моделью <b>{model_label}</b> нужно <b>{cost}</b> кредитов.\n"
+            f"Ваш баланс: <b>{remaining}</b> кредитов.\n\n"
+            f"Пополните баланс в приложении 👇",
+            parse_mode="HTML",
+            reply_markup=_insufficient_credits_keyboard(),
+        )
+        return
+
     extra = "\n🖼 С исходным изображением" if input_url else ""
 
     progress_msg = await callback.message.edit_text(
