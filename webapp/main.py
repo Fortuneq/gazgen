@@ -105,7 +105,7 @@ async def _warmup_cover_cache():
                     ir["content_type"] or "image/jpeg",
                 )
 
-    logger.info("Image cache warmed up: %d entries", image_cache.size)
+    print(f"[warmup] Image cache warmed up: {image_cache.size} entries")
 
 
 @asynccontextmanager
