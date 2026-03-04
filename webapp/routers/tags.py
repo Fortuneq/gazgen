@@ -4,6 +4,7 @@ from fastapi.responses import Response
 from webapp.db import get_pool
 from webapp.models import TagOut
 from webapp.image_cache import image_cache
+from webapp.routers.images import make_thumbnail
 
 router = APIRouter()
 
@@ -75,10 +76,9 @@ async def tag_cover(tag_name: str):
     if not row:
         raise HTTPException(status_code=404, detail="No cover for tag")
 
-    data = bytes(row["image_data"])
-    media = row["content_type"] or "image/jpeg"
-    image_cache.put(cache_key, data, media)
+    thumb = make_thumbnail(bytes(row["image_data"]))
+    image_cache.put(cache_key, thumb, "image/jpeg")
     return Response(
-        content=data, media_type=media,
+        content=thumb, media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=86400"},
     )

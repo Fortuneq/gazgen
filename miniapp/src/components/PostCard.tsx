@@ -34,7 +34,7 @@ export function PostCard({ post, onClick, aspectRatio, eager = false }: PostCard
       )}
       {hasImage && (
         <img
-          src={api.getResultImageUrl(post.id)}
+          src={api.getResultThumbUrl(post.id)}
           alt={post.prompt || "Generated image"}
           loading={eager ? "eager" : "lazy"}
           decoding="async"

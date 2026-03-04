@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,15 +9,16 @@ from fastapi.staticfiles import StaticFiles
 from webapp.db import init_pool, close_pool, get_pool
 from webapp.image_cache import image_cache
 from webapp.routers import categories, posts, images, search, generate, tags, profile, payments
+from webapp.routers.images import make_thumbnail
 
 logger = logging.getLogger(__name__)
 
 
 async def _warmup_cover_cache():
-    """Pre-load tag and category cover images into memory cache at startup."""
+    """Pre-generate thumbnails for feed images and cover images at startup."""
     pool = get_pool()
 
-    # Tag covers
+    # Tag covers (thumbnail)
     tag_rows = await pool.fetch(
         """
         SELECT DISTINCT unnest(tags) AS tag FROM posts
@@ -37,13 +37,14 @@ async def _warmup_cover_cache():
             tag_name,
         )
         if row and row["image_data"]:
+            raw = bytes(row["image_data"])
             image_cache.put(
                 f"tag_cover:{tag_name}",
-                bytes(row["image_data"]),
-                row["content_type"] or "image/jpeg",
+                make_thumbnail(raw),
+                "image/jpeg",
             )
 
-    # Category covers
+    # Category covers (thumbnail)
     cat_rows = await pool.fetch(
         "SELECT name FROM categories WHERE post_count > 0"
     )
@@ -59,51 +60,30 @@ async def _warmup_cover_cache():
             name,
         )
         if row and row["image_data"]:
+            raw = bytes(row["image_data"])
             image_cache.put(
                 f"cat_cover:{name}",
-                bytes(row["image_data"]),
-                row["content_type"] or "image/jpeg",
+                make_thumbnail(raw),
+                "image/jpeg",
             )
 
-    # Pre-load first 10 result images per category (what users see on home/feed)
-    for cr in cat_rows:
-        name = cr["name"]
-        img_rows = await pool.fetch(
-            """
-            SELECT i.post_id, i.image_data, i.content_type
-            FROM images i JOIN posts p ON i.post_id = p.id
-            WHERE p.model_name = $1 AND i.image_type = 'result'
-            ORDER BY p.id DESC LIMIT 10
-            """,
-            name,
-        )
-        for ir in img_rows:
-            if ir["image_data"]:
-                image_cache.put(
-                    f"result:{ir['post_id']}",
-                    bytes(ir["image_data"]),
-                    ir["content_type"] or "image/jpeg",
-                )
-
-    # Pre-load first 10 result images per tag
-    for tr in tag_rows:
-        tag_name = tr["tag"]
-        img_rows = await pool.fetch(
-            """
-            SELECT i.post_id, i.image_data, i.content_type
-            FROM images i JOIN posts p ON p.id = i.post_id
-            WHERE $1 = ANY(p.tags) AND i.image_type = 'result'
-            ORDER BY p.id DESC LIMIT 10
-            """,
-            tag_name,
-        )
-        for ir in img_rows:
-            if ir["image_data"]:
-                image_cache.put(
-                    f"result:{ir['post_id']}",
-                    bytes(ir["image_data"]),
-                    ir["content_type"] or "image/jpeg",
-                )
+    # Pre-generate thumbnails for latest 50 posts (first pages of feed)
+    img_rows = await pool.fetch(
+        """
+        SELECT i.post_id, i.image_data
+        FROM images i
+        WHERE i.image_type = 'result'
+        ORDER BY i.post_id DESC LIMIT 50
+        """
+    )
+    for ir in img_rows:
+        if ir["image_data"]:
+            raw = bytes(ir["image_data"])
+            image_cache.put(
+                f"thumb:{ir['post_id']}",
+                make_thumbnail(raw),
+                "image/jpeg",
+            )
 
     print(f"[warmup] Image cache warmed up: {image_cache.size} entries")
 

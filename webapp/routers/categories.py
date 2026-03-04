@@ -4,6 +4,7 @@ from webapp.db import get_pool
 from webapp.config import get_category_emoji
 from webapp.models import CategoryOut
 from webapp.image_cache import image_cache
+from webapp.routers.images import make_thumbnail
 
 router = APIRouter()
 
@@ -49,10 +50,9 @@ async def category_cover(name: str):
     if not row or not row["image_data"]:
         raise HTTPException(status_code=404, detail="Cover not found")
 
-    data = bytes(row["image_data"])
-    media = row["content_type"] or "image/jpeg"
-    image_cache.put(cache_key, data, media)
+    thumb = make_thumbnail(bytes(row["image_data"]))
+    image_cache.put(cache_key, thumb, "image/jpeg")
     return Response(
-        content=data, media_type=media,
+        content=thumb, media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=86400"},
     )

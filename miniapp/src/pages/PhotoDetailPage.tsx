@@ -249,7 +249,7 @@ export default function PhotoDetailPage() {
                     >
                       {sp.has_result_image && (
                         <img
-                          src={api.getResultImageUrl(sp.id)}
+                          src={api.getResultThumbUrl(sp.id)}
                           alt=""
                           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                           loading="lazy"

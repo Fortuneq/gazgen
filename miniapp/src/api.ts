@@ -56,6 +56,7 @@ export const api = {
 
   // Images
   getResultImageUrl: (postId: number) => `${BASE}/images/${postId}/result`,
+  getResultThumbUrl: (postId: number) => `${BASE}/images/${postId}/result/thumb`,
   getReferenceImageUrl: (postId: number, order: number) =>
     `${BASE}/images/${postId}/reference/${order}`,
 

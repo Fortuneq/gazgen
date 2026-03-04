@@ -216,7 +216,7 @@ export default function HomePage() {
                 >
                   {post.has_result_image && (
                     <img
-                      src={api.getResultImageUrl(post.id)}
+                      src={api.getResultThumbUrl(post.id)}
                       alt={post.prompt || ""}
                       style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                       loading="lazy"
