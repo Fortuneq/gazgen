@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from webapp.db import init_pool, close_pool, get_pool
 from webapp.image_cache import image_cache
-from webapp.routers import categories, posts, images, search, generate, tags, profile, payments
+from webapp.routers import categories, posts, images, search, generate, tags, profile, payments, pally, auth
 from webapp.routers.images import make_thumbnail
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,8 @@ app.include_router(generate.router, prefix="/api")
 app.include_router(tags.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
 app.include_router(payments.router, prefix="/api")
+app.include_router(pally.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 
 # Serve frontend static files (built React app) — MUST be last, catches all unmatched routes
 static_dir = Path(__file__).parent.parent / "static"

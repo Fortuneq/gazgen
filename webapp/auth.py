@@ -4,10 +4,16 @@ import json
 import time
 from urllib.parse import parse_qs, unquote
 
+import jwt
 from fastapi import Request, HTTPException
 
 from webapp.config import BOT_TOKEN
 from webapp.db import get_pool
+
+# JWT settings
+JWT_SECRET = BOT_TOKEN  # reuse bot token as secret
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_SECONDS = 30 * 24 * 3600  # 30 days
 
 
 def validate_init_data(init_data: str, bot_token: str) -> dict:
@@ -49,25 +55,70 @@ def validate_init_data(init_data: str, bot_token: str) -> dict:
     return {}
 
 
-async def get_current_user(request: Request) -> dict:
-    """FastAPI dependency: validate Telegram auth and upsert user."""
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("tma "):
-        raise HTTPException(status_code=401, detail="Missing authorization")
+def validate_telegram_login(data: dict, bot_token: str) -> dict:
+    """Validate Telegram Login Widget callback data."""
+    check_data = dict(data)
+    received_hash = check_data.pop("hash", None)
+    if not received_hash:
+        raise ValueError("Missing hash")
 
-    init_data = auth_header[4:]  # strip "tma " prefix
-    if not BOT_TOKEN:
-        raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
+    auth_date = check_data.get("auth_date")
+    if auth_date:
+        if time.time() - int(auth_date) > 86400:
+            raise ValueError("Auth data expired")
 
+    # Build check string: sorted key=value pairs joined by \n
+    data_check_string = "\n".join(
+        f"{k}={v}" for k, v in sorted(check_data.items())
+    )
+
+    # For Login Widget: secret = SHA256(bot_token)
+    secret_key = hashlib.sha256(bot_token.encode()).digest()
+    computed_hash = hmac.new(
+        secret_key, data_check_string.encode(), hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(computed_hash, received_hash):
+        raise ValueError("Invalid hash")
+
+    return {
+        "id": int(check_data["id"]),
+        "first_name": check_data.get("first_name", ""),
+        "last_name": check_data.get("last_name"),
+        "username": check_data.get("username"),
+        "photo_url": check_data.get("photo_url"),
+    }
+
+
+def create_jwt(user: dict) -> str:
+    """Create a JWT token for the authenticated user."""
+    payload = {
+        "sub": user["id"],
+        "first_name": user.get("first_name", ""),
+        "username": user.get("username"),
+        "exp": int(time.time()) + JWT_EXPIRE_SECONDS,
+        "iat": int(time.time()),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_jwt(token: str) -> dict:
+    """Decode and validate a JWT token."""
     try:
-        user = validate_init_data(init_data, BOT_TOKEN)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise ValueError("Token expired")
+    except jwt.InvalidTokenError:
+        raise ValueError("Invalid token")
+    return {
+        "id": payload["sub"],
+        "first_name": payload.get("first_name", ""),
+        "username": payload.get("username"),
+    }
 
-    if not user or not user.get("id"):
-        raise HTTPException(status_code=401, detail="No user in initData")
 
-    # Upsert user into users table
+async def _upsert_user(user: dict):
+    """Insert or update user in the database."""
     pool = get_pool()
     await pool.execute(
         """
@@ -88,4 +139,40 @@ async def get_current_user(request: Request) -> dict:
         user.get("is_premium", False),
     )
 
-    return user
+
+async def get_current_user(request: Request) -> dict:
+    """FastAPI dependency: validate Telegram auth (MiniApp or JWT) and upsert user."""
+    auth_header = request.headers.get("Authorization", "")
+
+    if not BOT_TOKEN:
+        raise HTTPException(status_code=500, detail="BOT_TOKEN not configured")
+
+    # Path 1: Telegram MiniApp initData
+    if auth_header.startswith("tma "):
+        init_data = auth_header[4:]
+        try:
+            user = validate_init_data(init_data, BOT_TOKEN)
+        except ValueError as e:
+            raise HTTPException(status_code=401, detail=str(e))
+
+        if not user or not user.get("id"):
+            raise HTTPException(status_code=401, detail="No user in initData")
+
+        await _upsert_user(user)
+        return user
+
+    # Path 2: JWT Bearer token (from Telegram Login Widget)
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            user = decode_jwt(token)
+        except ValueError as e:
+            raise HTTPException(status_code=401, detail=str(e))
+
+        if not user or not user.get("id"):
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+
+        await _upsert_user(user)
+        return user
+
+    raise HTTPException(status_code=401, detail="Missing authorization")

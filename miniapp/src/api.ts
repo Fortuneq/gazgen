@@ -10,13 +10,25 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
+function getAuthHeader(): string | null {
+  // Priority 1: Telegram MiniApp initData
   const initData = getInitData();
+  if (initData) return `tma ${initData}`;
+
+  // Priority 2: JWT from Telegram Login Widget (browser)
+  const token = localStorage.getItem("auth_token");
+  if (token) return `Bearer ${token}`;
+
+  return null;
+}
+
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (initData) {
-    headers["Authorization"] = `tma ${initData}`;
+  const auth = getAuthHeader();
+  if (auth) {
+    headers["Authorization"] = auth;
   }
   const res = await fetch(`${BASE}${url}`, {
     headers,
@@ -79,12 +91,12 @@ export const api = {
       body: JSON.stringify(data),
     }),
   uploadReference: async (file: File): Promise<{ url: string }> => {
-    const initData = getInitData();
     const formData = new FormData();
     formData.append("file", file);
     const headers: Record<string, string> = {};
-    if (initData) {
-      headers["Authorization"] = `tma ${initData}`;
+    const auth = getAuthHeader();
+    if (auth) {
+      headers["Authorization"] = auth;
     }
     const res = await fetch(`${BASE}/upload-reference`, {
       method: "POST",
@@ -97,7 +109,7 @@ export const api = {
   getGenerationStatus: (taskId: string) =>
     request<import("./types").GenerateStatus>(`/generate/${taskId}/status`),
 
-  // Payments
+  // Payments (CryptoCloud)
   createPayment: (data: import("./types").CreatePaymentRequest) =>
     request<import("./types").CreatePaymentResponse>("/payments/create", {
       method: "POST",
@@ -106,8 +118,24 @@ export const api = {
   getPaymentStatus: (orderId: string) =>
     request<import("./types").PaymentStatus>(`/payments/status/${encodeURIComponent(orderId)}`),
 
+  // Payments (Pally — card/SBP)
+  createPallyPayment: (data: import("./types").CreatePaymentRequest) =>
+    request<import("./types").CreatePaymentResponse>("/payments/pally/create", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getPallyPaymentStatus: (orderId: string) =>
+    request<import("./types").PaymentStatus>(`/payments/pally/status/${encodeURIComponent(orderId)}`),
+
   // Profile
   getProfile: () => request<import("./types").UserProfile>("/profile"),
+
+  // Auth (Telegram Login Widget)
+  authTelegram: (data: Record<string, string | number>) =>
+    request<{ token: string; user: { id: number; first_name: string; username?: string } }>("/auth/telegram", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   // Health
   health: () => request<{ status: string }>("/health"),
