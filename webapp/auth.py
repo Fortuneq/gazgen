@@ -121,24 +121,38 @@ async def _upsert_user(user: dict):
     """Insert or update user in the database."""
     pool = get_pool()
     telegram_id = int(user["id"])
-    await pool.execute(
-        """
-        INSERT INTO users (telegram_id, username, first_name, last_name, is_bot, is_premium, last_active_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
-        ON CONFLICT ON CONSTRAINT users_telegram_id_key
-        DO UPDATE SET
-            username = COALESCE(EXCLUDED.username, users.username),
-            first_name = COALESCE(EXCLUDED.first_name, users.first_name),
-            last_name = COALESCE(EXCLUDED.last_name, users.last_name),
-            last_active_at = NOW()
-        """,
-        telegram_id,
-        user.get("username"),
-        user.get("first_name"),
-        user.get("last_name"),
-        user.get("is_bot", False),
-        user.get("is_premium", False),
+    # Check if user exists first, then insert or update
+    existing = await pool.fetchrow(
+        "SELECT id FROM users WHERE telegram_id = $1", telegram_id
     )
+    if existing:
+        await pool.execute(
+            """
+            UPDATE users SET
+                username = COALESCE($2, username),
+                first_name = COALESCE($3, first_name),
+                last_name = COALESCE($4, last_name),
+                last_active_at = NOW()
+            WHERE telegram_id = $1
+            """,
+            telegram_id,
+            user.get("username"),
+            user.get("first_name"),
+            user.get("last_name"),
+        )
+    else:
+        await pool.execute(
+            """
+            INSERT INTO users (telegram_id, username, first_name, last_name, is_bot, is_premium, last_active_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            """,
+            telegram_id,
+            user.get("username"),
+            user.get("first_name"),
+            user.get("last_name"),
+            user.get("is_bot", False),
+            user.get("is_premium", False),
+        )
 
 
 async def get_current_user(request: Request) -> dict:
