@@ -120,18 +120,19 @@ def decode_jwt(token: str) -> dict:
 async def _upsert_user(user: dict):
     """Insert or update user in the database."""
     pool = get_pool()
+    telegram_id = int(user["id"])
     await pool.execute(
         """
         INSERT INTO users (telegram_id, username, first_name, last_name, is_bot, is_premium, last_active_at)
         VALUES ($1, $2, $3, $4, $5, $6, NOW())
-        ON CONFLICT (telegram_id)
+        ON CONFLICT ON CONSTRAINT users_telegram_id_key
         DO UPDATE SET
             username = COALESCE(EXCLUDED.username, users.username),
             first_name = COALESCE(EXCLUDED.first_name, users.first_name),
             last_name = COALESCE(EXCLUDED.last_name, users.last_name),
             last_active_at = NOW()
         """,
-        user["id"],
+        telegram_id,
         user.get("username"),
         user.get("first_name"),
         user.get("last_name"),
