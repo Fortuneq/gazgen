@@ -16,6 +16,11 @@ services:
       IMGBB_API_KEY: ${IMGBB_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       BOT_TOKEN: ${BOT_TOKEN:-}
+      CRYPTOCLOUD_API_KEY: ${CRYPTOCLOUD_API_KEY:-}
+      CRYPTOCLOUD_SHOP_ID: ${CRYPTOCLOUD_SHOP_ID:-}
+      CRYPTOCLOUD_SECRET: ${CRYPTOCLOUD_SECRET:-}
+      PALLY_API_TOKEN: ${PALLY_API_TOKEN:-}
+      PALLY_SHOP_ID: ${PALLY_SHOP_ID:-}
     restart: unless-stopped
     networks:
       - miniapp_network
