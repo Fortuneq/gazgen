@@ -93,7 +93,7 @@ def validate_telegram_login(data: dict, bot_token: str) -> dict:
 def create_jwt(user: dict) -> str:
     """Create a JWT token for the authenticated user."""
     payload = {
-        "sub": user["id"],
+        "sub": str(user["id"]),
         "first_name": user.get("first_name", ""),
         "username": user.get("username"),
         "exp": int(time.time()) + JWT_EXPIRE_SECONDS,
@@ -108,10 +108,10 @@ def decode_jwt(token: str) -> dict:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise ValueError("Token expired")
-    except jwt.InvalidTokenError:
-        raise ValueError("Invalid token")
+    except jwt.InvalidTokenError as e:
+        raise ValueError(f"Invalid token: {e}")
     return {
-        "id": payload["sub"],
+        "id": int(payload["sub"]),
         "first_name": payload.get("first_name", ""),
         "username": payload.get("username"),
     }
