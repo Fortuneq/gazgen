@@ -65,7 +65,25 @@ export function initTelegram() {
 }
 
 export function getUser() {
-  return getTelegram()?.initDataUnsafe?.user ?? null;
+  // Try Telegram MiniApp first
+  const tgUser = getTelegram()?.initDataUnsafe?.user;
+  if (tgUser) return tgUser;
+
+  // Fallback: decode JWT from localStorage (browser auth)
+  const token = localStorage.getItem("auth_token");
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      return {
+        id: Number(payload.sub),
+        first_name: payload.first_name || "",
+        last_name: undefined as string | undefined,
+        username: payload.username || undefined,
+        photo_url: undefined as string | undefined,
+      };
+    } catch { /* ignore */ }
+  }
+  return null;
 }
 
 export function getInitData(): string {

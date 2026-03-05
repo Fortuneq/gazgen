@@ -4,7 +4,7 @@ import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic, getUser } from "../telegram";
 import { api } from "../api";
-import { Coins, Sparkles } from "lucide-react";
+import { Coins, Sparkles, LogOut } from "lucide-react";
 
 export default function ProfilePage() {
   const isDesktop = useIsDesktop();
@@ -20,9 +20,15 @@ export default function ProfilePage() {
 
   const initials = user
     ? (user.first_name?.[0] ?? "") + (user.last_name?.[0] ?? "")
-    : "НГ";
-  const displayName = user?.first_name ?? "Никита";
-  const handle = user?.username ? `@${user.username}` : "@nikita_design";
+    : "?";
+  const displayName = user?.first_name ?? "Пользователь";
+  const handle = user?.username ? `@${user.username}` : "";
+
+  const isBrowser = !window.Telegram?.WebApp?.initData;
+  const handleLogout = () => {
+    localStorage.removeItem("auth_token");
+    window.location.reload();
+  };
 
   const emptyState = (
     <div style={{
@@ -99,6 +105,17 @@ export default function ProfilePage() {
             </button>
           </div>
 
+          {isBrowser && (
+            <button onClick={handleLogout} style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "12px 24px", borderRadius: 12, width: "fit-content",
+              background: "transparent", border: "1px solid #27272A", cursor: "pointer",
+            }}>
+              <LogOut size={16} color="#EF4444" />
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "#EF4444" }}>Выйти</span>
+            </button>
+          )}
+
           {emptyState}
         </div>
       </Layout>
@@ -144,6 +161,17 @@ export default function ProfilePage() {
             <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700, color: "#0A0A0A" }}>Купить</span>
           </button>
         </div>
+
+        {isBrowser && (
+          <button onClick={handleLogout} style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            padding: "12px 0", borderRadius: 12, width: "100%",
+            background: "transparent", border: "1px solid #27272A", cursor: "pointer",
+          }}>
+            <LogOut size={16} color="#EF4444" />
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "#EF4444" }}>Выйти</span>
+          </button>
+        )}
       </div>
 
       {emptyState}
