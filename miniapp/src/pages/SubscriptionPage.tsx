@@ -459,7 +459,7 @@ export default function SubscriptionPage() {
               <div style={{ display: "flex", gap: 16 }}>
                 {PLANS.map((plan) => {
                   const isSelected = selectedPlan === plan.name;
-                  const hasBorder = isSelected || plan.highlighted;
+                  const hasBorder = isSelected || (!selectedPlan && plan.highlighted);
                   return (
                   <div key={plan.name} onClick={() => { haptic(); setSelectedPlan(plan.name); setSelectedPack(null); }} style={{
                     flex: 1, padding: 24, borderRadius: 12,
@@ -517,7 +517,7 @@ export default function SubscriptionPage() {
               <div style={{ display: "flex", gap: 16 }}>
                 {TOKEN_PACKS.map((pack) => {
                   const isPackSelected = selectedPack === pack.amount;
-                  const hasPackBorder = isPackSelected || pack.highlighted;
+                  const hasPackBorder = isPackSelected || (!selectedPack && pack.highlighted);
                   return (
                   <div key={pack.amount} onClick={() => { haptic(); setSelectedPack(pack.amount); setSelectedPlan(null); }} style={{
                     flex: 1, padding: 24, borderRadius: 12,
@@ -606,7 +606,7 @@ export default function SubscriptionPage() {
           <div style={{ display: "flex", gap: 8 }}>
             {PLANS.map((plan) => {
               const isSel = selectedPlan === plan.name;
-              const hasBrd = isSel || plan.highlighted;
+              const hasBrd = isSel || (!selectedPlan && plan.highlighted);
               return (
               <div key={plan.name} onClick={() => { haptic(); setSelectedPlan(plan.name); setSelectedPack(null); }} style={{
                 flex: 1, padding: "14px 12px", borderRadius: 16,
@@ -655,7 +655,7 @@ export default function SubscriptionPage() {
           <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 600, color: "var(--text)" }}>Докупить токены</span>
           {TOKEN_PACKS.map((pack) => {
             const isPkSel = selectedPack === pack.amount;
-            const hasPkBrd = isPkSel || pack.highlighted;
+            const hasPkBrd = isPkSel || (!selectedPack && pack.highlighted);
             return (
             <div key={pack.amount} onClick={() => { haptic(); setSelectedPack(pack.amount); setSelectedPlan(null); }} style={{
               display: "flex", alignItems: "center", gap: 8,
