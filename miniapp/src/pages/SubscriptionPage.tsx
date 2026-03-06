@@ -3,7 +3,7 @@ import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic, getTelegram } from "../telegram";
 import { api } from "../api";
-import { Zap, Coins, ArrowLeft, ExternalLink, CheckCircle, Loader2 } from "lucide-react";
+import { Zap, Coins, ArrowLeft, ExternalLink, CheckCircle, Loader2, CreditCard, Bitcoin } from "lucide-react";
 
 interface SubPlan {
   name: string;
@@ -40,6 +40,8 @@ const TOKEN_PACKS: TokenPack[] = [
 
 type ModalType = null | { kind: "plan"; plan: SubPlan } | { kind: "tokens"; pack: TokenPack };
 
+type PaymentMethod = "card" | "crypto";
+
 type PaymentState =
   | { step: "idle" }
   | { step: "creating" }
@@ -49,6 +51,7 @@ type PaymentState =
 
 function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onClose: () => void }) {
   const isDesktop = useIsDesktop();
+  const [method, setMethod] = useState<PaymentMethod>("card");
   const [payState, setPayState] = useState<PaymentState>({ step: "idle" });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -71,11 +74,12 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
     };
   }, []);
 
-  const startPolling = useCallback((orderId: string) => {
+  const startPolling = useCallback((orderId: string, pm: PaymentMethod) => {
     if (pollRef.current) clearInterval(pollRef.current);
+    const statusFn = pm === "card" ? api.getPallyPaymentStatus : api.getPaymentStatus;
     pollRef.current = setInterval(async () => {
       try {
-        const status = await api.getPaymentStatus(orderId);
+        const status = await statusFn(orderId);
         if (status.status === "paid") {
           if (pollRef.current) clearInterval(pollRef.current);
           haptic("heavy");
@@ -92,19 +96,22 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
     setPayState({ step: "creating" });
 
     try {
-      const result = await api.createPayment({
+      const payData = {
         product_type: productType,
         product_name: productName,
         amount: priceNum,
         tokens: tokensNum,
-      });
+      };
+      const result = method === "card"
+        ? await api.createPallyPayment(payData)
+        : await api.createPayment(payData);
 
       setPayState({ step: "awaiting", paymentUrl: result.payment_url, orderId: result.order_id });
-      startPolling(result.order_id);
+      startPolling(result.order_id, method);
     } catch {
       setPayState({ step: "error", message: "Не удалось создать платёж. Попробуйте снова." });
     }
-  }, [priceNum, tokensNum, productType, productName, startPolling]);
+  }, [priceNum, tokensNum, productType, productName, startPolling, method]);
 
   const openPaymentLink = useCallback(() => {
     if (payState.step !== "awaiting") return;
@@ -115,6 +122,12 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
     } else {
       window.open(payState.paymentUrl, "_blank");
     }
+  }, [payState]);
+
+  const switchMethod = useCallback((m: PaymentMethod) => {
+    if (payState.step !== "idle") return;
+    haptic();
+    setMethod(m);
   }, [payState]);
 
   /* ── Success screen ── */
@@ -159,6 +172,13 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
     );
   }
 
+  const methodTitle = method === "card" ? "Оплата картой / СБП" : "Оплата криптой";
+  const methodDesc = method === "card"
+    ? "Банковская карта или Система быстрых платежей"
+    : "BTC, ETH, USDT и другие криптовалюты";
+  const payButtonLabel = method === "card" ? "Оплатить" : "Оплатить криптой";
+  const PayIcon = method === "card" ? CreditCard : Bitcoin;
+
   /* ── Payment card ── */
   const paymentCard = (
     <div style={{
@@ -182,20 +202,60 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
         </div>
         <span style={{
           fontFamily: "var(--font-primary)", fontSize: 24, fontWeight: 700, color: "#FFFFFF",
-        }}>Оплата криптой</span>
+        }}>{methodTitle}</span>
         <span style={{
           fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A",
           textAlign: "center", maxWidth: 380,
-        }}>Оплата через CryptoCloud — BTC, ETH, USDT и другие криптовалюты</span>
+        }}>{methodDesc}</span>
+      </div>
+
+      {/* Payment method switcher */}
+      <div style={{
+        display: "flex", gap: 8, padding: isDesktop ? "8px 32px 4px" : "8px 24px 4px",
+      }}>
+        <button
+          onClick={() => switchMethod("card")}
+          style={{
+            flex: 1, height: 40, borderRadius: 10,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            background: method === "card" ? "#27272A" : "transparent",
+            border: method === "card" ? "1px solid #3F3F46" : "1px solid #27272A",
+            cursor: payState.step === "idle" ? "pointer" : "default",
+            opacity: payState.step !== "idle" && method !== "card" ? 0.4 : 1,
+          }}
+        >
+          <CreditCard size={14} color={method === "card" ? "#C4F82A" : "#71717A"} />
+          <span style={{
+            fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
+            color: method === "card" ? "#FFFFFF" : "#71717A",
+          }}>Карта / СБП</span>
+        </button>
+        <button
+          onClick={() => switchMethod("crypto")}
+          style={{
+            flex: 1, height: 40, borderRadius: 10,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            background: method === "crypto" ? "#27272A" : "transparent",
+            border: method === "crypto" ? "1px solid #3F3F46" : "1px solid #27272A",
+            cursor: payState.step === "idle" ? "pointer" : "default",
+            opacity: payState.step !== "idle" && method !== "crypto" ? 0.4 : 1,
+          }}
+        >
+          <Bitcoin size={14} color={method === "crypto" ? "#C4F82A" : "#71717A"} />
+          <span style={{
+            fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
+            color: method === "crypto" ? "#FFFFFF" : "#71717A",
+          }}>Крипто</span>
+        </button>
       </div>
 
       {/* Divider */}
-      <div style={{ height: 1, background: "#27272A" }} />
+      <div style={{ height: 1, background: "#27272A", margin: "8px 0" }} />
 
       {/* Details Section */}
       <div style={{
         display: "flex", flexDirection: "column", gap: 12,
-        padding: isDesktop ? "20px 32px" : "20px 24px",
+        padding: isDesktop ? "12px 32px 20px" : "12px 24px 20px",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontFamily: "var(--font-body)", fontSize: 14, color: "#71717A" }}>Тариф</span>
@@ -236,9 +296,9 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
           onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
           >
-            <Coins size={18} color="#0A0A0A" />
+            <PayIcon size={18} color="#0A0A0A" />
             <span style={{ fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 600, color: "#0A0A0A" }}>
-              Оплатить криптой
+              {payButtonLabel}
             </span>
           </button>
         )}
@@ -466,7 +526,7 @@ export default function SubscriptionPage() {
               fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-muted)",
               textAlign: "center", alignSelf: "center", maxWidth: 500,
             }}>
-              Оплата криптовалютой через CryptoCloud. Поддерживаются BTC, ETH, USDT и другие.
+              Оплата картой, СБП или криптовалютой.
             </span>
           </div>
         </div>

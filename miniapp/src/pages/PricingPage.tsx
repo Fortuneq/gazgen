@@ -229,7 +229,7 @@ export default function PricingPage() {
           fontFamily: "var(--font-body)", fontSize: 11, color: "#52525B",
           textAlign: "center", lineHeight: 1.5, maxWidth: 295,
         }}>
-          Оплата криптовалютой через CryptoCloud. BTC, ETH, USDT и другие.
+          Оплата картой, СБП или криптовалютой.
         </span>
       </div>
     </div>
