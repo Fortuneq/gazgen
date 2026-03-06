@@ -261,8 +261,8 @@ def _insufficient_credits_keyboard() -> InlineKeyboardMarkup:
     miniapp_url = os.getenv("MINIAPP_URL")
     if miniapp_url:
         from aiogram.types import WebAppInfo
-        pricing_url = miniapp_url.rstrip("/") + "/pricing"
-        builder.button(text="💰 Купить кредиты", web_app=WebAppInfo(url=pricing_url))
+        pricing_url = miniapp_url.rstrip("/") + "/subscription"
+        builder.button(text="💰 Купить токены", web_app=WebAppInfo(url=pricing_url))
     builder.button(text="🏠 Главное меню", callback_data="menu:main")
     builder.adjust(1)
     return builder.as_markup()
@@ -444,12 +444,18 @@ async def _run_generation(
 @router.callback_query(F.data == "imggen:start")
 async def imggen_start(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text(
+    text = (
         "🎨 <b>Генерация изображения</b>\n\n"
-        "Выберите модель для генерации:",
-        parse_mode="HTML",
-        reply_markup=_model_keyboard(),
+        "Выберите модель для генерации:"
     )
+    try:
+        await callback.message.edit_text(
+            text, parse_mode="HTML", reply_markup=_model_keyboard(),
+        )
+    except Exception:
+        await callback.message.answer(
+            text, parse_mode="HTML", reply_markup=_model_keyboard(),
+        )
 
 
 @router.callback_query(F.data.startswith("imggen:model:"))
@@ -552,9 +558,9 @@ async def imggen_got_ratio(callback: CallbackQuery, state: FSMContext):
     )
     if not success:
         await callback.message.edit_text(
-            f"❌ <b>Недостаточно кредитов</b>\n\n"
-            f"Для генерации с моделью <b>{model_label}</b> нужно <b>{cost}</b> кредитов.\n"
-            f"Ваш баланс: <b>{remaining}</b> кредитов.\n\n"
+            f"❌ <b>Недостаточно токенов</b>\n\n"
+            f"Для генерации с моделью <b>{model_label}</b> нужно <b>{cost}</b> токенов.\n"
+            f"Ваш баланс: <b>{remaining}</b> токенов.\n\n"
             f"Пополните баланс в приложении 👇",
             parse_mode="HTML",
             reply_markup=_insufficient_credits_keyboard(),

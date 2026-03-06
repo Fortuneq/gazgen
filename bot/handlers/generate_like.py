@@ -69,8 +69,8 @@ def _insufficient_credits_keyboard():
     miniapp_url = os.getenv("MINIAPP_URL")
     if miniapp_url:
         from aiogram.types import WebAppInfo
-        pricing_url = miniapp_url.rstrip("/") + "/pricing"
-        builder.button(text="💰 Купить кредиты", web_app=WebAppInfo(url=pricing_url))
+        pricing_url = miniapp_url.rstrip("/") + "/subscription"
+        builder.button(text="💰 Купить токены", web_app=WebAppInfo(url=pricing_url))
     builder.button(text="🏠 Главное меню", callback_data="menu:main")
     builder.adjust(1)
     return builder.as_markup()
@@ -496,9 +496,9 @@ async def _proceed_to_generation(message, state: FSMContext, telegram_id: int = 
         if not success:
             await state.clear()
             await message.answer(
-                f"❌ <b>Недостаточно кредитов</b>\n\n"
-                f"Для генерации нужно <b>{cost}</b> кредитов.\n"
-                f"Ваш баланс: <b>{remaining}</b> кредитов.\n\n"
+                f"❌ <b>Недостаточно токенов</b>\n\n"
+                f"Для генерации нужно <b>{cost}</b> токенов.\n"
+                f"Ваш баланс: <b>{remaining}</b> токенов.\n\n"
                 f"Пополните баланс в приложении 👇",
                 parse_mode="HTML",
                 reply_markup=_insufficient_credits_keyboard(),

@@ -12,6 +12,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       KIE_API_KEY: ${KIE_API_KEY:-}
       IMGBB_API_KEY: ${IMGBB_API_KEY:-}
+      MINIAPP_URL: ${MINIAPP_URL:-}
       # Connect to host PostgreSQL
       DB_HOST: 172.17.0.1  # Docker bridge gateway
       DB_PORT: 5432
