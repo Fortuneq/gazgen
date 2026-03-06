@@ -23,6 +23,7 @@ const AdminPhotosPage = lazy(() => import("./pages/admin/AdminPhotosPage"));
 const AdminCategoriesPage = lazy(() => import("./pages/admin/AdminCategoriesPage"));
 const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
 const AdminStatsPage = lazy(() => import("./pages/admin/AdminStatsPage"));
+const AdminTagsPage = lazy(() => import("./pages/admin/AdminTagsPage"));
 
 function LoadingFallback() {
   return (
@@ -69,6 +70,7 @@ export function App() {
         <Route path="/admin/categories" element={<AdminGate><AdminCategoriesPage /></AdminGate>} />
         <Route path="/admin/users" element={<AdminGate><AdminUsersPage /></AdminGate>} />
         <Route path="/admin/stats" element={<AdminGate><AdminStatsPage /></AdminGate>} />
+        <Route path="/admin/tags" element={<AdminGate><AdminTagsPage /></AdminGate>} />
       </Routes>
     </Suspense>
   );

@@ -194,3 +194,13 @@ export interface PaymentStats {
   amount: number;
   count: number;
 }
+
+export interface AdminTag {
+  id: number;
+  name: string;
+  display_name: string;
+  emoji: string;
+  hidden: boolean;
+  sort_order: number;
+  post_count: number;
+}

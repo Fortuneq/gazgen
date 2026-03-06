@@ -7,6 +7,7 @@ from webapp.models import (
     AdminPostOut, PaginatedAdminPosts,
     AdminCategoryOut, AdminUserOut, PaginatedAdminUsers,
     CreditAdjust, StatsOverview, PopularModelOut, DailyActiveOut, PaymentStatsOut,
+    AdminTagOut,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -350,3 +351,106 @@ async def admin_payment_stats(
         PaymentStatsOut(date=str(r["date"]), amount=float(r["amount"]), count=r["cnt"])
         for r in rows
     ]
+
+
+# --------------- tags ---------------
+
+@router.get("/tags", response_model=list[AdminTagOut])
+async def admin_get_tags(user: dict = Depends(get_admin_user)):
+    pool = get_pool()
+
+    # Get post counts per tag
+    try:
+        tag_counts = await pool.fetch(
+            """
+            SELECT unnest(tags) AS tag, COUNT(*) AS cnt
+            FROM posts
+            WHERE tags IS NOT NULL AND array_length(tags, 1) > 0
+            GROUP BY tag
+            """
+        )
+    except Exception:
+        tag_counts = []
+    count_map = {r["tag"]: r["cnt"] for r in tag_counts}
+
+    rows = await pool.fetch("SELECT id, name, display_name, emoji, hidden, sort_order FROM tag_settings ORDER BY sort_order, name")
+    return [
+        AdminTagOut(
+            id=r["id"], name=r["name"], display_name=r["display_name"],
+            emoji=r["emoji"] or "", hidden=r["hidden"], sort_order=r["sort_order"],
+            post_count=count_map.get(r["name"], 0),
+        )
+        for r in rows
+    ]
+
+
+@router.post("/tags", response_model=AdminTagOut)
+async def admin_create_tag(
+    name: str = Query(...),
+    display_name: str = Query(...),
+    emoji: str = Query(""),
+    hidden: bool = Query(False),
+    sort_order: int = Query(0),
+    user: dict = Depends(get_admin_user),
+):
+    pool = get_pool()
+    row = await pool.fetchrow(
+        """
+        INSERT INTO tag_settings (name, display_name, emoji, hidden, sort_order)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, name, display_name, emoji, hidden, sort_order
+        """,
+        name, display_name, emoji, hidden, sort_order,
+    )
+    return AdminTagOut(
+        id=row["id"], name=row["name"], display_name=row["display_name"],
+        emoji=row["emoji"] or "", hidden=row["hidden"], sort_order=row["sort_order"],
+        post_count=0,
+    )
+
+
+@router.patch("/tags/{tag_id}")
+async def admin_update_tag(
+    tag_id: int,
+    name: Optional[str] = Query(None),
+    display_name: Optional[str] = Query(None),
+    emoji: Optional[str] = Query(None),
+    hidden: Optional[bool] = Query(None),
+    sort_order: Optional[int] = Query(None),
+    user: dict = Depends(get_admin_user),
+):
+    pool = get_pool()
+    sets = []
+    args = []
+    idx = 1
+    for field, value in [("name", name), ("display_name", display_name), ("emoji", emoji)]:
+        if value is not None:
+            sets.append(f"{field} = ${idx}")
+            args.append(value)
+            idx += 1
+    if hidden is not None:
+        sets.append(f"hidden = ${idx}")
+        args.append(hidden)
+        idx += 1
+    if sort_order is not None:
+        sets.append(f"sort_order = ${idx}")
+        args.append(sort_order)
+        idx += 1
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    args.append(tag_id)
+    result = await pool.execute(
+        f"UPDATE tag_settings SET {', '.join(sets)} WHERE id = ${idx}", *args
+    )
+    if result == "UPDATE 0":
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return {"ok": True}
+
+
+@router.delete("/tags/{tag_id}")
+async def admin_delete_tag(tag_id: int, user: dict = Depends(get_admin_user)):
+    pool = get_pool()
+    result = await pool.execute("DELETE FROM tag_settings WHERE id = $1", tag_id)
+    if result == "DELETE 0":
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return {"ok": True}

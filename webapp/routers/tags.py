@@ -8,9 +8,9 @@ from webapp.routers.images import make_thumbnail
 
 router = APIRouter()
 
-HIDDEN_TAGS = {"male", "female"}
-
-TAG_DISPLAY = {
+# Hardcoded fallbacks — used only if tag_settings table doesn't exist yet
+_FALLBACK_HIDDEN = {"male", "female"}
+_FALLBACK_DISPLAY = {
     "couple": {"display_name": "Пары", "emoji": "💑"},
     "group": {"display_name": "Группа", "emoji": "👥"},
     "landscape": {"display_name": "Пейзажи", "emoji": "🏞"},
@@ -24,9 +24,21 @@ TAG_DISPLAY = {
 }
 
 
+async def _get_tag_settings(pool) -> dict:
+    """Load tag_settings from DB; returns {name: {display_name, emoji, hidden, sort_order}}."""
+    try:
+        rows = await pool.fetch("SELECT name, display_name, emoji, hidden, sort_order FROM tag_settings")
+        return {r["name"]: dict(r) for r in rows}
+    except Exception:
+        # Table doesn't exist yet — use fallback
+        return {}
+
+
 @router.get("/tags", response_model=list[TagOut])
 async def list_tags():
     pool = get_pool()
+    settings = await _get_tag_settings(pool)
+
     rows = await pool.fetch(
         """
         SELECT unnest(tags) AS tag, COUNT(*) AS cnt
@@ -36,18 +48,37 @@ async def list_tags():
         ORDER BY cnt DESC
         """
     )
+
     result = []
     for r in rows:
         tag_name = r["tag"]
-        if tag_name in HIDDEN_TAGS:
-            continue
-        info = TAG_DISPLAY.get(tag_name, {"display_name": tag_name.capitalize(), "emoji": "📁"})
+
+        if settings:
+            info = settings.get(tag_name)
+            if info and info.get("hidden"):
+                continue
+            display_name = info["display_name"] if info else tag_name.capitalize()
+            emoji = info["emoji"] if info else "📁"
+            sort_order = info["sort_order"] if info else 999
+        else:
+            if tag_name in _FALLBACK_HIDDEN:
+                continue
+            fb = _FALLBACK_DISPLAY.get(tag_name, {"display_name": tag_name.capitalize(), "emoji": "📁"})
+            display_name = fb["display_name"]
+            emoji = fb["emoji"]
+            sort_order = 999
+
         result.append(TagOut(
             name=tag_name,
-            display_name=info["display_name"],
-            emoji=info["emoji"],
+            display_name=display_name,
+            emoji=emoji,
             post_count=r["cnt"],
         ))
+
+    if settings:
+        order_map = {s["name"]: s.get("sort_order", 999) for s in settings.values()}
+        result.sort(key=lambda t: order_map.get(t.name, 999))
+
     return result
 
 

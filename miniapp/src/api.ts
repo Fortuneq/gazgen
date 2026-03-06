@@ -196,4 +196,23 @@ export const api = {
     request<import("./types").DailyActive[]>(`/admin/stats/daily-active?days=${days}`),
   adminPaymentStats: (days = 30) =>
     request<import("./types").PaymentStats[]>(`/admin/stats/payments?days=${days}`),
+
+  // Admin Tags
+  adminGetTags: () =>
+    request<import("./types").AdminTag[]>("/admin/tags"),
+  adminCreateTag: (name: string, display_name: string, emoji: string) => {
+    const sp = new URLSearchParams({ name, display_name, emoji });
+    return request<import("./types").AdminTag>(`/admin/tags?${sp.toString()}`, { method: "POST" });
+  },
+  adminUpdateTag: (id: number, params: { name?: string; display_name?: string; emoji?: string; hidden?: boolean; sort_order?: number }) => {
+    const sp = new URLSearchParams();
+    if (params.name !== undefined) sp.set("name", params.name);
+    if (params.display_name !== undefined) sp.set("display_name", params.display_name);
+    if (params.emoji !== undefined) sp.set("emoji", params.emoji);
+    if (params.hidden !== undefined) sp.set("hidden", String(params.hidden));
+    if (params.sort_order !== undefined) sp.set("sort_order", String(params.sort_order));
+    return request<{ ok: boolean }>(`/admin/tags/${id}?${sp.toString()}`, { method: "PATCH" });
+  },
+  adminDeleteTag: (id: number) =>
+    request<{ ok: boolean }>(`/admin/tags/${id}`, { method: "DELETE" }),
 };

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Layout } from "../../components/Layout";
 import { api } from "../../api";
 import type { StatsOverview } from "../../types";
-import { Image, FolderOpen, Users, BarChart3, ArrowLeft } from "lucide-react";
+import { Image, FolderOpen, Users, BarChart3, ArrowLeft, Tag } from "lucide-react";
 import { haptic } from "../../telegram";
 
 export default function AdminDashboardPage() {
@@ -17,6 +17,7 @@ export default function AdminDashboardPage() {
   const cards = [
     { label: "Фото", icon: Image, path: "/admin/photos", color: "#C4F82A" },
     { label: "Категории", icon: FolderOpen, path: "/admin/categories", color: "#60A5FA" },
+    { label: "Теги (Примеры)", icon: Tag, path: "/admin/tags", color: "#FBBF24" },
     { label: "Пользователи", icon: Users, path: "/admin/users", color: "#A78BFA" },
     { label: "Статистика", icon: BarChart3, path: "/admin/stats", color: "#F472B6" },
   ];

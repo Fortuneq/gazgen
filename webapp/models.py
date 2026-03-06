@@ -205,3 +205,13 @@ class PaymentStatsOut(BaseModel):
     date: str
     amount: float
     count: int
+
+
+class AdminTagOut(BaseModel):
+    id: int
+    name: str
+    display_name: str
+    emoji: str
+    hidden: bool
+    sort_order: int
+    post_count: Optional[int] = 0
