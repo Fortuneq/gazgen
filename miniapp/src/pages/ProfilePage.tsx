@@ -96,7 +96,7 @@ export default function ProfilePage() {
               <Coins size={18} color="var(--accent)" />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{photoCredits} токенов</span>
             </div>
-            <button onClick={() => navigate("/pricing")}
+            <button onClick={() => navigate("/subscription")}
               style={{
                 padding: "10px 20px", borderRadius: 12,
                 background: "var(--accent)", border: "none", cursor: "pointer",
@@ -153,7 +153,7 @@ export default function ProfilePage() {
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{photoCredits} токенов</span>
             </div>
           </div>
-          <button onClick={() => navigate("/pricing")}
+          <button onClick={() => navigate("/subscription")}
             style={{
               padding: "8px 14px", borderRadius: 10,
               background: "var(--accent)", border: "none", cursor: "pointer",

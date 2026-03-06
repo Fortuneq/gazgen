@@ -40,7 +40,7 @@ export function Layout({
   if (isDesktop) {
     return (
       <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
-        <DesktopNav credits={credits} onCreditsClick={() => navigate("/pricing")} />
+        <DesktopNav credits={credits} onCreditsClick={() => navigate("/subscription")} />
         <main style={{ flex: 1, width: "100%", maxWidth: 1440, margin: "0 auto", padding: "0 40px" }}>
           {children}
         </main>
@@ -56,7 +56,7 @@ export function Layout({
         showBack={showBack}
         showCredits={showCredits && !title}
         credits={credits}
-        onCreditsClick={() => navigate("/pricing")}
+        onCreditsClick={() => navigate("/subscription")}
         rightAction={headerRight}
       />
       <main style={{ flex: 1, overflowY: "auto", paddingBottom: showTabBar ? 64 : 0 }}>

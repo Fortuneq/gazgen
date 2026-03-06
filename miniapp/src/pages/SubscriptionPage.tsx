@@ -383,6 +383,8 @@ export default function SubscriptionPage() {
   const location = useLocation();
   const [modal, setModal] = useState<ModalType>(null);
   const [photoCredits, setPhotoCredits] = useState<number | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [selectedPack, setSelectedPack] = useState<string | null>(null);
 
   useEffect(() => {
     api.getProfile().then((p) => setPhotoCredits(p.photo_credits)).catch(() => {});
@@ -401,8 +403,18 @@ export default function SubscriptionPage() {
     }
   }, [location.state]);
 
-  const openPlan = (plan: SubPlan) => { haptic("medium"); setModal({ kind: "plan", plan }); };
-  const openTokens = (pack: TokenPack) => { haptic("medium"); setModal({ kind: "tokens", pack }); };
+  const openPlan = (plan: SubPlan) => {
+    haptic("medium");
+    setSelectedPlan(plan.name);
+    setSelectedPack(null);
+    setModal({ kind: "plan", plan });
+  };
+  const openTokens = (pack: TokenPack) => {
+    haptic("medium");
+    setSelectedPack(pack.amount);
+    setSelectedPlan(null);
+    setModal({ kind: "tokens", pack });
+  };
 
   const handleClose = () => {
     setModal(null);
@@ -445,13 +457,17 @@ export default function SubscriptionPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <span style={{ fontFamily: "var(--font-primary)", fontSize: 22, fontWeight: 700, color: "var(--text)" }}>Подписка</span>
               <div style={{ display: "flex", gap: 16 }}>
-                {PLANS.map((plan) => (
-                  <div key={plan.name} style={{
+                {PLANS.map((plan) => {
+                  const isSelected = selectedPlan === plan.name;
+                  const hasBorder = isSelected || plan.highlighted;
+                  return (
+                  <div key={plan.name} onClick={() => { haptic(); setSelectedPlan(plan.name); setSelectedPack(null); }} style={{
                     flex: 1, padding: 24, borderRadius: 12,
                     background: "var(--surface)",
-                    border: plan.highlighted ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+                    border: hasBorder ? "1.5px solid var(--accent)" : "1px solid var(--border)",
                     display: "flex", flexDirection: "column", gap: 16,
-                    transition: "transform 0.15s, box-shadow 0.15s",
+                    cursor: "pointer",
+                    transition: "transform 0.15s, box-shadow 0.15s, border 0.15s",
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(196,248,42,0.1)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}
@@ -475,65 +491,71 @@ export default function SubscriptionPage() {
                         <span key={f} style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-secondary)" }}>✓ {f}</span>
                       ))}
                     </div>
-                    <button onClick={() => openPlan(plan)} style={{
+                    <button onClick={(e) => { e.stopPropagation(); openPlan(plan); }} style={{
                       height: 40, borderRadius: 10, width: "100%",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      background: plan.highlighted ? "var(--accent)" : "#27272A",
+                      background: isSelected || plan.highlighted ? "var(--accent)" : "#27272A",
                       border: "none", cursor: "pointer",
-                      transition: "opacity 0.15s",
+                      transition: "opacity 0.15s, background 0.15s",
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
                     >
                       <span style={{
                         fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600,
-                        color: plan.highlighted ? "#0A0A0A" : "var(--text)",
+                        color: isSelected || plan.highlighted ? "#0A0A0A" : "var(--text)",
                       }}>Выбрать</span>
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <span style={{ fontFamily: "var(--font-primary)", fontSize: 22, fontWeight: 700, color: "var(--text)" }}>Докупить токены</span>
               <div style={{ display: "flex", gap: 16 }}>
-                {TOKEN_PACKS.map((pack) => (
-                  <div key={pack.amount} style={{
+                {TOKEN_PACKS.map((pack) => {
+                  const isPackSelected = selectedPack === pack.amount;
+                  const hasPackBorder = isPackSelected || pack.highlighted;
+                  return (
+                  <div key={pack.amount} onClick={() => { haptic(); setSelectedPack(pack.amount); setSelectedPlan(null); }} style={{
                     flex: 1, padding: 24, borderRadius: 12,
                     background: "var(--surface)",
-                    border: pack.highlighted ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+                    border: hasPackBorder ? "1.5px solid var(--accent)" : "1px solid var(--border)",
                     display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
-                    transition: "transform 0.15s, box-shadow 0.15s",
+                    cursor: "pointer",
+                    transition: "transform 0.15s, box-shadow 0.15s, border 0.15s",
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(196,248,42,0.1)"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}
                   >
-                    <Coins size={28} color={pack.highlighted ? "var(--accent)" : "var(--text-muted)"} />
+                    <Coins size={28} color={hasPackBorder ? "var(--accent)" : "var(--text-muted)"} />
                     <span style={{ fontFamily: "var(--font-body)", fontSize: 16, fontWeight: 600, color: "var(--text)" }}>{pack.amount}</span>
                     {pack.badge && (
                       <div style={{ padding: "2px 8px", borderRadius: 4, background: "var(--accent)" }}>
                         <span style={{ fontFamily: "var(--font-primary)", fontSize: 10, fontWeight: 700, color: "#0A0A0A" }}>{pack.badge}</span>
                       </div>
                     )}
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: pack.highlighted ? "var(--accent)" : "var(--text)" }}>{pack.price}</span>
-                    <button onClick={() => openTokens(pack)} style={{
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: hasPackBorder ? "var(--accent)" : "var(--text)" }}>{pack.price}</span>
+                    <button onClick={(e) => { e.stopPropagation(); openTokens(pack); }} style={{
                       height: 40, borderRadius: 10, width: "100%",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      background: pack.highlighted ? "var(--accent)" : "#27272A",
+                      background: hasPackBorder ? "var(--accent)" : "#27272A",
                       border: "none", cursor: "pointer",
-                      transition: "opacity 0.15s",
+                      transition: "opacity 0.15s, background 0.15s",
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
                     >
                       <span style={{
                         fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600,
-                        color: pack.highlighted ? "#0A0A0A" : "var(--text)",
+                        color: hasPackBorder ? "#0A0A0A" : "var(--text)",
                       }}>Купить</span>
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -582,12 +604,17 @@ export default function SubscriptionPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 600, color: "var(--text)" }}>Подписка</span>
           <div style={{ display: "flex", gap: 8 }}>
-            {PLANS.map((plan) => (
-              <div key={plan.name} style={{
+            {PLANS.map((plan) => {
+              const isSel = selectedPlan === plan.name;
+              const hasBrd = isSel || plan.highlighted;
+              return (
+              <div key={plan.name} onClick={() => { haptic(); setSelectedPlan(plan.name); setSelectedPack(null); }} style={{
                 flex: 1, padding: "14px 12px", borderRadius: 16,
                 background: "var(--surface)",
-                border: plan.highlighted ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+                border: hasBrd ? "1.5px solid var(--accent)" : "1px solid var(--border)",
                 display: "flex", flexDirection: "column", gap: 10,
+                cursor: "pointer",
+                transition: "border 0.15s",
               }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontFamily: "var(--font-primary)", fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{plan.name}</span>
@@ -606,32 +633,39 @@ export default function SubscriptionPage() {
                     <span key={f} style={{ fontFamily: "var(--font-body)", fontSize: 11, color: "var(--text-secondary)" }}>✓ {f}</span>
                   ))}
                 </div>
-                <button onClick={() => openPlan(plan)} style={{
+                <button onClick={(e) => { e.stopPropagation(); openPlan(plan); }} style={{
                   height: 34, borderRadius: 8, width: "100%",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  background: plan.highlighted ? "var(--accent)" : "#27272A",
+                  background: hasBrd ? "var(--accent)" : "#27272A",
                   border: "none", cursor: "pointer",
+                  transition: "background 0.15s",
                 }}>
                   <span style={{
                     fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
-                    color: plan.highlighted ? "#0A0A0A" : "var(--text)",
+                    color: hasBrd ? "#0A0A0A" : "var(--text)",
                   }}>Выбрать</span>
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 600, color: "var(--text)" }}>Докупить токены</span>
-          {TOKEN_PACKS.map((pack) => (
-            <div key={pack.amount} style={{
+          {TOKEN_PACKS.map((pack) => {
+            const isPkSel = selectedPack === pack.amount;
+            const hasPkBrd = isPkSel || pack.highlighted;
+            return (
+            <div key={pack.amount} onClick={() => { haptic(); setSelectedPack(pack.amount); setSelectedPlan(null); }} style={{
               display: "flex", alignItems: "center", gap: 8,
               padding: "14px 16px", borderRadius: 12,
               background: "var(--surface)",
-              border: pack.highlighted ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+              border: hasPkBrd ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+              cursor: "pointer",
+              transition: "border 0.15s",
             }}>
-              <Coins size={18} color={pack.highlighted ? "var(--accent)" : "var(--text-muted)"} />
+              <Coins size={18} color={hasPkBrd ? "var(--accent)" : "var(--text-muted)"} />
               <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{pack.amount}</span>
               {pack.badge && (
                 <div style={{ padding: "2px 6px", borderRadius: 4, background: "var(--accent)" }}>
@@ -641,20 +675,22 @@ export default function SubscriptionPage() {
               <div style={{ flex: 1 }} />
               <span style={{
                 fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700,
-                color: pack.highlighted ? "var(--accent)" : "var(--text)",
+                color: hasPkBrd ? "var(--accent)" : "var(--text)",
               }}>{pack.price}</span>
-              <button onClick={() => openTokens(pack)} style={{
+              <button onClick={(e) => { e.stopPropagation(); openTokens(pack); }} style={{
                 padding: "6px 14px", borderRadius: 8,
-                background: pack.highlighted ? "var(--accent)" : "#27272A",
+                background: hasPkBrd ? "var(--accent)" : "#27272A",
                 border: "none", cursor: "pointer",
+                transition: "background 0.15s",
               }}>
                 <span style={{
                   fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
-                  color: pack.highlighted ? "#0A0A0A" : "var(--text)",
+                  color: hasPkBrd ? "#0A0A0A" : "var(--text)",
                 }}>Купить</span>
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div style={{ display: "flex", justifyContent: "center" }}>

@@ -5,7 +5,7 @@ const navLinks = [
   { path: "/", label: "Главная" },
   { path: "/create", label: "Создать" },
   { path: "/categories", label: "Примеры" },
-  { path: "/pricing", label: "Тарифы" },
+  { path: "/subscription", label: "Тарифы" },
 ] as const;
 
 interface DesktopNavProps {

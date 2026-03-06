@@ -10,7 +10,6 @@ const LoadingPage = lazy(() => import("./pages/LoadingPage"));
 const ResultPage = lazy(() => import("./pages/ResultPage"));
 const AnimatePage = lazy(() => import("./pages/AnimatePage"));
 const AnimatePromptPage = lazy(() => import("./pages/AnimatePromptPage"));
-const PricingPage = lazy(() => import("./pages/PricingPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const PhotoDetailPage = lazy(() => import("./pages/PhotoDetailPage"));
@@ -51,7 +50,7 @@ export function App() {
         <Route path="/result/:taskId" element={<ResultPage />} />
         <Route path="/animate" element={<AnimatePage />} />
         <Route path="/animate/prompt" element={<AnimatePromptPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/pricing" element={<SubscriptionPage />} />
         <Route path="/subscription" element={<SubscriptionPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/photo/:postId" element={<PhotoDetailPage />} />

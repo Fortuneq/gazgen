@@ -160,7 +160,7 @@ export default function GeneratePage() {
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
-        navigate("/pricing");
+        navigate("/subscription");
         return;
       }
       setLoading(false);
@@ -703,7 +703,7 @@ export default function GeneratePage() {
             <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#71717A" }}>
               Нет токенов?
             </span>
-            <button onClick={() => navigate("/pricing")} style={{ border: "none", background: "none", padding: 0 }}>
+            <button onClick={() => navigate("/subscription")} style={{ border: "none", background: "none", padding: 0 }}>
               <span style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 600, color: "#C4F82A" }}>
                 Подписка от 299р/мес
               </span>
