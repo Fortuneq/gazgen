@@ -11,6 +11,8 @@ IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload"
 IMGBB_EXPIRATION = 600
 
 KIE_BASE_URL = "https://api.kie.ai/api/v1/jobs"
+KIE_FILE_URL_UPLOAD = "https://api.kie.ai/api/file-url-upload"
+KIE_FILE_BASE64_UPLOAD = "https://api.kie.ai/api/file-base64-upload"
 
 CATEGORY_TO_MODEL = {
     "nano_banana_pro": "nano-banana-pro",
@@ -105,6 +107,54 @@ async def upload_image_to_imgbb(image_bytes: bytes) -> str | None:
                 return None
     except Exception as e:
         logger.error("Error uploading to ImgBB: %s", e)
+        return None
+
+
+async def upload_to_kie_base64(image_bytes: bytes, filename: str = "ref.png") -> str | None:
+    """Upload image bytes to KIE via base64, return downloadUrl."""
+    try:
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {KIE_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "base64Data": image_base64,
+            "uploadPath": "references",
+            "fileName": filename,
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(KIE_FILE_BASE64_UPLOAD, json=payload, headers=headers) as resp:
+                data = await resp.json()
+                if data.get("success"):
+                    return data["data"]["downloadUrl"]
+                logger.error("KIE base64 upload failed: %s", data)
+                return None
+    except Exception as e:
+        logger.error("Error uploading to KIE (base64): %s", e)
+        return None
+
+
+async def upload_to_kie_url(file_url: str) -> str | None:
+    """Re-upload an external URL to KIE storage, return downloadUrl."""
+    try:
+        headers = {
+            "Authorization": f"Bearer {KIE_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "fileUrl": file_url,
+            "uploadPath": "references",
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(KIE_FILE_URL_UPLOAD, json=payload, headers=headers) as resp:
+                data = await resp.json()
+                if data.get("success"):
+                    return data["data"]["downloadUrl"]
+                logger.error("KIE URL upload failed: %s", data)
+                return None
+    except Exception as e:
+        logger.error("Error uploading to KIE (url): %s", e)
         return None
 
 

@@ -12,6 +12,8 @@ from webapp.models import (
 from webapp.services.generation import (
     get_model_id,
     upload_image_to_imgbb,
+    upload_to_kie_base64,
+    upload_to_kie_url,
     create_generation_task,
     create_generation_task_v2,
     poll_task_status,
@@ -90,15 +92,15 @@ async def start_generation(req: GenerateRequest, user: dict = Depends(get_curren
     if not prompt:
         raise HTTPException(status_code=400, detail="No prompt available")
 
-    # Upload reference images to imgbb
+    # Upload reference images to KIE
     reference_urls: list[str] = []
     if req.use_references:
         ref_rows = await pool.fetch(
             "SELECT image_data FROM images WHERE post_id = $1 AND image_type = 'reference' ORDER BY reference_order",
             req.post_id,
         )
-        for ref_row in ref_rows:
-            url = await upload_image_to_imgbb(bytes(ref_row["image_data"]))
+        for i, ref_row in enumerate(ref_rows):
+            url = await upload_to_kie_base64(bytes(ref_row["image_data"]), f"ref_{req.post_id}_{i}.png")
             if url:
                 reference_urls.append(url)
 
@@ -114,9 +116,9 @@ async def start_generation(req: GenerateRequest, user: dict = Depends(get_curren
 
     cost = await _get_model_cost(pool, model_key)
     await pool.execute(
-        "INSERT INTO user_generations (telegram_id, task_id, prompt, model, aspect_ratio, cost, status) "
-        "VALUES ($1, $2, $3, $4, $5, $6, 'pending') ON CONFLICT (task_id) DO NOTHING",
-        telegram_id, task_id, prompt, model_key, req.aspect_ratio, cost,
+        "INSERT INTO user_generations (telegram_id, task_id, prompt, model, aspect_ratio, cost, status, reference_urls) "
+        "VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7) ON CONFLICT (task_id) DO NOTHING",
+        telegram_id, task_id, prompt, model_key, req.aspect_ratio, cost, reference_urls or None,
     )
 
     return GenerateResponse(task_id=task_id)
@@ -138,9 +140,16 @@ async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depen
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required")
 
+    # Re-upload user reference URLs to KIE storage
+    kie_ref_urls: list[str] = []
+    for ref_url in req.reference_urls:
+        kie_url = await upload_to_kie_url(ref_url)
+        if kie_url:
+            kie_ref_urls.append(kie_url)
+
     try:
         task_id = await create_generation_task_v2(
-            req.model, req.prompt, req.reference_urls, req.aspect_ratio
+            req.model, req.prompt, kie_ref_urls, req.aspect_ratio
         )
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -150,10 +159,12 @@ async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depen
     await _check_and_deduct(pool, telegram_id, req.model, task_id)
 
     cost = await _get_model_cost(pool, req.model)
+    # Save original user URLs as references (before KIE re-upload)
+    orig_refs = req.reference_urls if req.reference_urls else None
     await pool.execute(
-        "INSERT INTO user_generations (telegram_id, task_id, prompt, model, aspect_ratio, cost, status) "
-        "VALUES ($1, $2, $3, $4, $5, $6, 'pending') ON CONFLICT (task_id) DO NOTHING",
-        telegram_id, task_id, req.prompt.strip(), req.model, req.aspect_ratio, cost,
+        "INSERT INTO user_generations (telegram_id, task_id, prompt, model, aspect_ratio, cost, status, reference_urls) "
+        "VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7) ON CONFLICT (task_id) DO NOTHING",
+        telegram_id, task_id, req.prompt.strip(), req.model, req.aspect_ratio, cost, orig_refs,
     )
 
     return GenerateResponse(task_id=task_id)
@@ -165,7 +176,7 @@ async def upload_reference(file: UploadFile = File(...), user: dict = Depends(ge
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-    url = await upload_image_to_imgbb(contents)
+    url = await upload_to_kie_base64(contents, file.filename or "reference.png")
     if not url:
         raise HTTPException(status_code=500, detail="Failed to upload image")
 

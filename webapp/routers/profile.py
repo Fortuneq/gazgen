@@ -42,7 +42,7 @@ async def get_my_generations(
     total = total_row["cnt"]
 
     rows = await pool.fetch(
-        "SELECT id, task_id, prompt, model, aspect_ratio, result_url, cost, created_at "
+        "SELECT id, task_id, prompt, model, aspect_ratio, result_url, reference_urls, cost, created_at "
         "FROM user_generations "
         "WHERE telegram_id = $1 AND status = 'success' "
         "ORDER BY created_at DESC LIMIT $2 OFFSET $3",
@@ -57,6 +57,7 @@ async def get_my_generations(
             model=r["model"],
             aspect_ratio=r["aspect_ratio"],
             result_url=r["result_url"],
+            reference_urls=list(r["reference_urls"]) if r["reference_urls"] else None,
             cost=r["cost"],
             created_at=r["created_at"].isoformat() if r["created_at"] else "",
         )
@@ -76,7 +77,7 @@ async def get_my_generations(
 async def get_generation_by_task(task_id: str, user: dict = Depends(get_current_user)):
     pool = get_pool()
     r = await pool.fetchrow(
-        "SELECT id, task_id, prompt, model, aspect_ratio, result_url, cost, created_at "
+        "SELECT id, task_id, prompt, model, aspect_ratio, result_url, reference_urls, cost, created_at "
         "FROM user_generations WHERE task_id = $1 AND telegram_id = $2",
         task_id, user["id"],
     )
@@ -89,6 +90,7 @@ async def get_generation_by_task(task_id: str, user: dict = Depends(get_current_
         model=r["model"],
         aspect_ratio=r["aspect_ratio"],
         result_url=r["result_url"],
+        reference_urls=list(r["reference_urls"]) if r["reference_urls"] else None,
         cost=r["cost"],
         created_at=r["created_at"].isoformat() if r["created_at"] else "",
     )

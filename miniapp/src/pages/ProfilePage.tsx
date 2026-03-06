@@ -206,6 +206,21 @@ export default function ProfilePage() {
               </p>
             </div>
           )}
+          {selected.reference_urls && selected.reference_urls.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#52525B" }}>Референсы</span>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                {selected.reference_urls.map((url, i) => (
+                  <div key={i} style={{
+                    width: 64, height: 64, borderRadius: 10, overflow: "hidden",
+                    border: "1px solid #27272A",
+                  }}>
+                    <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -106,6 +106,7 @@ export interface UserGeneration {
   model: string;
   aspect_ratio: string | null;
   result_url: string | null;
+  reference_urls: string[] | null;
   cost: number;
   created_at: string;
 }

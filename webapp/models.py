@@ -119,6 +119,7 @@ class UserGenerationOut(BaseModel):
     model: str
     aspect_ratio: Optional[str] = None
     result_url: Optional[str] = None
+    reference_urls: Optional[List[str]] = None
     cost: int
     created_at: str
 
