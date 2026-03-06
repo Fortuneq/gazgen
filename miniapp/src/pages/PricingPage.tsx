@@ -164,7 +164,7 @@ export default function PricingPage() {
 
               {/* Button */}
               <button
-                onClick={() => { haptic(); navigate("/subscription"); }}
+                onClick={() => { haptic(); navigate("/subscription", { state: { openPlan: plan.name } }); }}
                 style={{
                   height: 34, borderRadius: 8, width: "100%",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -191,7 +191,7 @@ export default function PricingPage() {
         {TOKEN_PACKS.map((pack) => (
           <button
             key={pack.tokens}
-            onClick={() => { haptic(); navigate("/subscription"); }}
+            onClick={() => { haptic(); navigate("/subscription", { state: { openPack: pack.tokens } }); }}
             style={{
               display: "flex", alignItems: "center", gap: 8,
               padding: "14px 16px", borderRadius: 12,

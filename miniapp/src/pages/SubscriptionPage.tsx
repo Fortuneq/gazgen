@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic, getTelegram } from "../telegram";
@@ -379,12 +380,26 @@ function PaymentScreen({ modal, onClose }: { modal: NonNullable<ModalType>; onCl
 
 export default function SubscriptionPage() {
   const isDesktop = useIsDesktop();
+  const location = useLocation();
   const [modal, setModal] = useState<ModalType>(null);
   const [photoCredits, setPhotoCredits] = useState<number | null>(null);
 
   useEffect(() => {
     api.getProfile().then((p) => setPhotoCredits(p.photo_credits)).catch(() => {});
   }, []);
+
+  // Auto-open payment modal if navigated with state from PricingPage
+  useEffect(() => {
+    const state = location.state as { openPlan?: string; openPack?: string } | null;
+    if (!state) return;
+    if (state.openPlan) {
+      const plan = PLANS.find((p) => p.name === state.openPlan);
+      if (plan) setModal({ kind: "plan", plan });
+    } else if (state.openPack) {
+      const pack = TOKEN_PACKS.find((p) => p.amount === state.openPack);
+      if (pack) setModal({ kind: "tokens", pack });
+    }
+  }, [location.state]);
 
   const openPlan = (plan: SubPlan) => { haptic("medium"); setModal({ kind: "plan", plan }); };
   const openTokens = (pack: TokenPack) => { haptic("medium"); setModal({ kind: "tokens", pack }); };
