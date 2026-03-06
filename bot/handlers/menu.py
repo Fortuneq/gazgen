@@ -2,9 +2,8 @@
 /start handler and main menu — Photix Bot
 Clean chat: single message edited for navigation
 """
-import os
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, WebAppInfo
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -27,10 +26,7 @@ def main_menu_keyboard(balance: int):
     builder.button(text="🎭 Замена лица", callback_data="flow:faceswap")
     builder.button(text="💰 Купить токены", callback_data="purchase:menu")
     builder.button(text="👤 Профиль", callback_data="profile:show")
-    miniapp_url = os.getenv("MINIAPP_URL")
-    if miniapp_url:
-        builder.button(text="🌐 Веб-приложение", web_app=WebAppInfo(url=miniapp_url))
-    builder.adjust(2, 2, 2, 1)
+    builder.adjust(2, 2, 2)
     return builder.as_markup()
 
 
