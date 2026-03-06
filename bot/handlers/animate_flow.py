@@ -3,10 +3,9 @@ Animate photo flow — Photix Bot
 Flow: Demo GIF intro → Upload photo → Motion prompt (or Auto) → Duration → Confirm → Generate
 Note: Animation API not yet connected — shows placeholder
 """
-import os
 import logging
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message, FSInputFile, BufferedInputFile
+from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -17,9 +16,6 @@ from bot.utils import safe_edit_text, safe_delete, insufficient_tokens_text
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-# Path to demo GIF (inside container via mount)
-DEMO_GIF_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "animate_demo.mp4")
 
 
 class AnimateState(StatesGroup):
@@ -51,17 +47,17 @@ async def animate_start(callback: CallbackQuery, state: FSMContext):
     # Delete the current menu message (it's text-only)
     await safe_delete(callback.message)
 
-    # Send demo GIF + intro
+    # Send demo video + intro
     try:
-        gif_file = FSInputFile(DEMO_GIF_PATH, filename="animate_demo.gif")
-        await callback.message.answer_animation(
-            animation=gif_file,
+        video_file = FSInputFile(DEMO_GIF_PATH, filename="animate_demo.mp4")
+        await callback.message.answer_video(
+            video=video_file,
             caption=intro_text,
             parse_mode="HTML",
             reply_markup=builder.as_markup(),
         )
     except Exception as e:
-        logger.warning("Could not send demo GIF: %s", e)
+        logger.warning("Could not send demo video: %s", e)
         # Fallback: text only
         await callback.message.answer(
             intro_text,
