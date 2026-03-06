@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import ANIMATE_COSTS
+ANIMATE_COSTS = {"3s": 2, "5s": 3, "10s": 5}
 from bot.user_db import get_balance, deduct_tokens
 from bot.utils import safe_edit_text, safe_delete, insufficient_tokens_text
 

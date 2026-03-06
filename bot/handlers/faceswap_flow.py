@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import FACESWAP_COST
+FACESWAP_COST = 9
 from bot.user_db import get_balance, deduct_tokens
 from bot.utils import safe_edit_text, safe_delete, insufficient_tokens_text
 

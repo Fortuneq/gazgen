@@ -1,6 +1,6 @@
 """
-Custom prompt flow — "Свой промпт" advanced mode
-Flow: Select model → Select format → Enter prompt → Confirm → Generate → Result
+Custom prompt flow — "Свой промпт" advanced mode with img2img support
+Flow: Select model → Enter prompt → (Upload photo for img2img) → Choose format → Confirm → Generate → Result
 """
 import logging
 from aiogram import Router, F
@@ -9,18 +9,24 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot.config import PHOTO_MODEL_COSTS, ASPECT_RATIOS
+from bot.handlers.photo_flow import PHOTO_MODELS, PHOTO_MODELS_MAP, ASPECT_RATIOS, _run_photo_generation
 from bot.user_db import get_balance, deduct_tokens
 from bot.utils import safe_edit_text, safe_delete, insufficient_tokens_text
 
 router = Router()
 logger = logging.getLogger(__name__)
 
+# Add img2img model
+IMG2IMG_MODEL = {"key": "gpt_img2img", "label": "GPT Img2Img", "cost": 19, "tier": "Pro", "time": "10-20с"}
+ALL_MODELS = PHOTO_MODELS + [IMG2IMG_MODEL]
+ALL_MODELS_MAP = {m["key"]: m for m in ALL_MODELS}
+
 
 class CustomPromptState(StatesGroup):
     choosing_model = State()
-    choosing_format = State()
     entering_prompt = State()
+    waiting_photo = State()    # For img2img
+    choosing_format = State()
     confirming = State()
 
 
@@ -28,12 +34,10 @@ class CustomPromptState(StatesGroup):
 
 def build_model_keyboard():
     builder = InlineKeyboardBuilder()
-    for key, info in PHOTO_MODEL_COSTS.items():
-        if key == "gpt_img2img":
-            continue  # skip img2img in custom prompt mode
+    for m in ALL_MODELS:
         builder.button(
-            text=f"{info['label']} ({info['tokens']}💰)",
-            callback_data=f"custmodel:{key}",
+            text=f"{m['label']} ({m['cost']}💰)",
+            callback_data=f"custmodel:{m['key']}",
         )
     builder.button(text="⬅ Назад", callback_data="flow:photo")
     builder.adjust(2)
@@ -52,45 +56,27 @@ async def custom_prompt_start(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# ── Step B: Choose format ────────────────────────────────────
+# ── Step B: Enter prompt ──────────────────────────────────────
 
 @router.callback_query(CustomPromptState.choosing_model, F.data.startswith("custmodel:"))
 async def choose_model(callback: CallbackQuery, state: FSMContext):
     model_key = callback.data.split(":", 1)[1]
-    if model_key not in PHOTO_MODEL_COSTS:
+    model = ALL_MODELS_MAP.get(model_key)
+    if not model:
         await callback.answer("Неизвестная модель", show_alert=True)
         return
 
     await state.update_data(model_key=model_key)
-    await state.set_state(CustomPromptState.choosing_format)
-
-    builder = InlineKeyboardBuilder()
-    for ratio in ASPECT_RATIOS:
-        builder.button(text=ratio, callback_data=f"custfmt:{ratio}")
-    builder.button(text="⬅ Назад", callback_data="custprompt:start")
-    builder.adjust(3, 1)
-
-    model_label = PHOTO_MODEL_COSTS[model_key]["label"]
-    await safe_edit_text(
-        callback.message,
-        f"📐 <b>{model_label}</b>\n\nВыбери формат:",
-        reply_markup=builder.as_markup(),
-    )
-    await callback.answer()
-
-
-# ── Step C: Enter prompt ─────────────────────────────────────
-
-@router.callback_query(CustomPromptState.choosing_format, F.data.startswith("custfmt:"))
-async def choose_format(callback: CallbackQuery, state: FSMContext):
-    ratio = callback.data.split(":", 1)[1]
-    await state.update_data(ratio=ratio)
     await state.set_state(CustomPromptState.entering_prompt)
 
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅ Назад", callback_data="custprompt:start")
+
     await safe_edit_text(
         callback.message,
-        "✍️ <b>Введи промпт</b>\n\n"
-        "Опиши, что хочешь сгенерировать (на русском или английском):",
+        f"✍️ <b>{model['label']}</b> ({model['cost']}💰)\n\n"
+        f"Введи промпт (на русском или английском):",
+        reply_markup=builder.as_markup(),
     )
     await callback.answer()
 
@@ -103,34 +89,95 @@ async def receive_prompt(message: Message, state: FSMContext):
         return
 
     await state.update_data(prompt=prompt)
-    await state.set_state(CustomPromptState.confirming)
-
-    # Delete user's message (clean chat)
     await safe_delete(message)
 
     data = await state.get_data()
+    model_key = data.get("model_key", "seedream")
+
+    # If img2img model, ask for photo
+    if model_key == "gpt_img2img":
+        await state.set_state(CustomPromptState.waiting_photo)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="⬅ Назад", callback_data="custprompt:start")
+        await message.answer(
+            "🖼 <b>Отправь исходное фото</b>\n\n"
+            "GPT Img2Img преобразит твоё фото по промпту.",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup(),
+        )
+    else:
+        await _show_format(message, state)
+
+
+# ── Step C: Photo for img2img ─────────────────────────────────
+
+@router.message(CustomPromptState.waiting_photo, F.photo)
+async def receive_photo(message: Message, state: FSMContext):
+    photo = message.photo[-1]
+    file = await message.bot.get_file(photo.file_id)
+    token = message.bot.token
+    url = f"https://api.telegram.org/file/bot{token}/{file.file_path}"
+    await state.update_data(input_url=url)
+    await safe_delete(message)
+    await _show_format(message, state)
+
+
+@router.message(CustomPromptState.waiting_photo)
+async def wrong_photo(message: Message):
+    await message.answer("Отправь фото (не файл).")
+
+
+# ── Step D: Format ────────────────────────────────────────────
+
+async def _show_format(msg: Message, state: FSMContext):
+    await state.set_state(CustomPromptState.choosing_format)
+
+    builder = InlineKeyboardBuilder()
+    for ratio in ASPECT_RATIOS:
+        builder.button(text=ratio, callback_data=f"custfmt:{ratio}")
+    builder.button(text="⬅ Назад", callback_data="custprompt:start")
+    builder.adjust(3, 1)
+
+    await safe_edit_text(
+        msg,
+        "📐 <b>Выбери формат:</b>",
+        reply_markup=builder.as_markup(),
+    )
+
+
+@router.callback_query(CustomPromptState.choosing_format, F.data.startswith("custfmt:"))
+async def choose_format(callback: CallbackQuery, state: FSMContext):
+    ratio = callback.data.split(":", 1)[1]
+    await state.update_data(ratio=ratio)
+    await state.set_state(CustomPromptState.confirming)
+
+    data = await state.get_data()
     model_key = data["model_key"]
-    ratio = data["ratio"]
-    model_info = PHOTO_MODEL_COSTS[model_key]
+    model = ALL_MODELS_MAP.get(model_key, ALL_MODELS[0])
+    prompt = data.get("prompt", "")
+    has_photo = bool(data.get("input_url"))
 
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Создать", callback_data="custgen:go")
     builder.button(text="❌ Отмена", callback_data="menu:main")
     builder.adjust(2)
 
-    await message.answer(
+    photo_line = f"\n📸 Своё фото: Да" if has_photo else ""
+
+    await safe_edit_text(
+        callback.message,
         f"📋 <b>Подтверждение</b>\n\n"
-        f"🤖 Модель: {model_info['label']}\n"
-        f"📐 Формат: {ratio}\n"
+        f"🤖 Модель: <b>{model['label']}</b>\n"
+        f"📐 Формат: {ratio}{photo_line}\n"
         f"📝 Промпт: <i>{prompt[:200]}</i>\n"
-        f"💰 Стоимость: <b>{model_info['tokens']}</b> токенов\n\n"
+        f"💰 Стоимость: <b>{model['cost']}</b> токенов\n\n"
         f"Создать?",
-        parse_mode="HTML",
         reply_markup=builder.as_markup(),
     )
+    await callback.answer()
 
 
-# ── Step D: Generate ─────────────────────────────────────────
+# ── Step E: Generate ──────────────────────────────────────────
 
 @router.callback_query(F.data == "custgen:go")
 async def custom_generate(callback: CallbackQuery, state: FSMContext):
@@ -138,10 +185,11 @@ async def custom_generate(callback: CallbackQuery, state: FSMContext):
     model_key = data.get("model_key", "seedream")
     ratio = data.get("ratio", "1:1")
     prompt = data.get("prompt", "")
+    input_url = data.get("input_url", "")
     user_id = callback.from_user.id
 
-    model_info = PHOTO_MODEL_COSTS.get(model_key, {"tokens": 1, "label": "AI"})
-    cost = model_info["tokens"]
+    model = ALL_MODELS_MAP.get(model_key, ALL_MODELS[0])
+    cost = model["cost"]
 
     balance = get_balance(user_id)
     if balance < cost:
@@ -166,11 +214,9 @@ async def custom_generate(callback: CallbackQuery, state: FSMContext):
 
     progress_msg = await safe_edit_text(
         callback.message,
-        f"⏳ <b>Генерирую...</b> {model_info.get('time', '10-20с')}\n\n"
-        f"Модель: {model_info['label']}",
+        f"⏳ <b>Генерирую...</b> ~{model.get('time', '10-20с')}\n\n"
+        f"🤖 {model['label']}",
     )
     await callback.answer()
 
-    # Reuse the photo flow generation
-    from bot.handlers.photo_flow import _run_photo_generation
-    await _run_photo_generation(progress_msg, model_key, prompt, ratio, "", new_balance)
+    await _run_photo_generation(progress_msg, model_key, prompt, ratio, input_url, new_balance)
