@@ -3,21 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic } from "../telegram";
-import { Upload, Video, Image, Clapperboard, AlertTriangle, X as XIcon } from "lucide-react";
-import type { AnimateModel } from "../types";
+import { Upload, Video, Image, Clapperboard, X as XIcon } from "lucide-react";
 
-type AnimeDuration = "5" | "10" | "15";
+type AnimeDuration = "5" | "10";
 
-const DURATIONS: { label: string; value: AnimeDuration }[] = [
-  { label: "5 сек", value: "5" },
-  { label: "10 сек", value: "10" },
-  { label: "15 сек", value: "15" },
-];
-
-const MODELS: { label: string; value: AnimateModel; cost: number }[] = [
-  { label: "Kling 2.6", value: "kling2.6", cost: 3 },
-  { label: "Kling 3.0", value: "kling3.0", cost: 5 },
-  { label: "Veo", value: "veo", cost: 4 },
+const DURATIONS: { label: string; value: AnimeDuration; cost: number }[] = [
+  { label: "5 сек", value: "5", cost: 30 },
+  { label: "10 сек", value: "10", cost: 60 },
 ];
 
 export default function AnimatePage() {
@@ -27,34 +19,10 @@ export default function AnimatePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [duration, setDuration] = useState<AnimeDuration>("5");
-  const [model, setModel] = useState<AnimateModel>("kling2.6");
   const [prompt, setPrompt] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [showDurationWarning, setShowDurationWarning] = useState(true);
 
-  const cost = MODELS.find((m) => m.value === model)?.cost ?? 3;
-
-  const durationWarning = duration === "15" && showDurationWarning ? (
-    <div style={{
-      display: "flex", alignItems: "flex-start", gap: 10,
-      padding: isDesktop ? "14px 16px" : "12px 14px", borderRadius: 12,
-      background: "#1A2E05", border: "1px solid #3F6212", width: "100%",
-    }}>
-      <AlertTriangle size={18} color="#C4F82A" style={{ flexShrink: 0, marginTop: 1 }} />
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-        <span style={{ fontFamily: "var(--font-primary)", fontSize: 13, fontWeight: 700, color: "#C4F82A" }}>
-          Долгая генерация
-        </span>
-        <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#A1A1AA", lineHeight: 1.4 }}>
-          Видео длительностью 15 секунд генерируется значительно дольше. Ожидание может составить до 5–10 минут.
-        </span>
-      </div>
-      <button onClick={() => setShowDurationWarning(false)} style={{ padding: 0, background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
-        <XIcon size={16} color="#71717A" />
-      </button>
-    </div>
-  ) : null;
-
+  const cost = DURATIONS.find((d) => d.value === duration)?.cost ?? 30;
 
   const handleFile = (file: File) => {
     if (file.size > 10 * 1024 * 1024) return;
@@ -72,7 +40,7 @@ export default function AnimatePage() {
   const handleSubmit = () => {
     if (!selectedFile) return;
     haptic("medium");
-    // submit from this page directly
+    // TODO: submit to API
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -207,6 +175,7 @@ export default function AnimatePage() {
                 background: active ? "var(--accent)" : "var(--surface)",
                 border: active ? "none" : "1px solid var(--border)",
                 display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 6,
               }}>
               <span style={{
                 fontFamily: "var(--font-body)", fontSize: 13,
@@ -215,39 +184,13 @@ export default function AnimatePage() {
               }}>
                 {d.label}
               </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  const modelSection = (
-    <div style={{ display: "flex", flexDirection: "column", gap: isDesktop ? 10 : 12, width: "100%" }}>
-      <span style={{
-        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
-        fontSize: isDesktop ? 14 : 16, fontWeight: isDesktop ? 600 : 700,
-        color: isDesktop ? "var(--text-secondary)" : "var(--text)",
-      }}>
-        Модель
-      </span>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
-        {MODELS.map((m) => {
-          const active = model === m.value;
-          return (
-            <button key={m.value} onClick={() => { haptic(); setModel(m.value); }}
-              style={{
-                padding: isDesktop ? "8px 20px" : "8px 14px",
-                borderRadius: isDesktop ? 100 : 12,
-                background: active ? "var(--accent)" : "var(--surface)",
-                border: active ? "none" : "1px solid var(--border)",
-              }}>
               <span style={{
-                fontFamily: "var(--font-body)", fontSize: 13,
-                fontWeight: active ? 600 : 500,
-                color: active ? "#0A0A0A" : "var(--text-secondary)",
+                fontFamily: "var(--font-mono)", fontSize: 12,
+                fontWeight: 500,
+                color: active ? "#0A0A0A" : "var(--text-muted)",
+                opacity: active ? 0.7 : 0.6,
               }}>
-                {m.label}
+                {d.cost}💰
               </span>
             </button>
           );
@@ -266,7 +209,7 @@ export default function AnimatePage() {
         Стоимость
       </span>
       <span style={{ fontFamily: "var(--font-mono)", fontSize: isDesktop ? 16 : 14, fontWeight: isDesktop ? 700 : 500, color: "var(--accent)" }}>
-        ⚡ {cost} кредита
+        ⚡ {cost} токенов
       </span>
     </div>
   );
@@ -290,7 +233,7 @@ export default function AnimatePage() {
         fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
         fontSize: isDesktop ? 15 : 16, fontWeight: 700, color: "#0A0A0A",
       }}>
-        Оживить — {cost} кредита
+        Оживить — {cost} токенов
       </span>
     </button>
   );
@@ -316,8 +259,6 @@ export default function AnimatePage() {
             </div>
             {promptSection}
             {durationSection}
-            {durationWarning}
-            {modelSection}
             {costRow}
             {ctaButton}
           </div>
@@ -364,7 +305,6 @@ export default function AnimatePage() {
         </div>
         {promptSection}
         {durationSection}
-        {modelSection}
         {costRow}
       </div>
       <div style={{ padding: "12px 20px 24px 20px" }}>

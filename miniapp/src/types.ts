@@ -121,7 +121,6 @@ export interface PaginatedGenerations {
 
 export type PromptMode = "original" | "custom";
 export type AspectRatio = "1:1" | "16:9" | "9:16";
-export type AnimeDuration = "3" | "5" | "10" | "15";
-export type AnimateModel = "kling2.6" | "kling3.0" | "veo";
+export type AnimeDuration = "5" | "10";
 export type ViewFilter = "all" | "photo" | "video";
 export type FeedFilter = "all" | "popular" | "new";

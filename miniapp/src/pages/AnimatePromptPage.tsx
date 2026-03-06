@@ -3,23 +3,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic } from "../telegram";
-import { Check, Video, Upload, Info, Clapperboard } from "lucide-react";
-import type { AnimeDuration, AnimateModel } from "../types";
+import { Check, Video, Upload, Clapperboard } from "lucide-react";
+import type { AnimeDuration } from "../types";
 
-const DURATIONS: { label: string; value: AnimeDuration }[] = [
-  { label: "3с", value: "3" },
-  { label: "5с", value: "5" },
-  { label: "10с", value: "10" },
-  { label: "15с", value: "15" },
+const DURATIONS: { label: string; value: AnimeDuration; cost: number }[] = [
+  { label: "5 сек", value: "5", cost: 30 },
+  { label: "10 сек", value: "10", cost: 60 },
 ];
-
-const MODELS: { label: string; value: AnimateModel }[] = [
-  { label: "Kling 2.6", value: "kling2.6" },
-  { label: "Kling 3.0", value: "kling3.0" },
-  { label: "Veo", value: "veo" },
-];
-
-const COST = 5;
 
 export default function AnimatePromptPage() {
   const isDesktop = useIsDesktop();
@@ -28,10 +18,9 @@ export default function AnimatePromptPage() {
   const { preview } = (location.state as { preview?: string }) || {};
 
   const [prompt, setPrompt] = useState("Девушка поворачивает голову, улыбается и поправляет волосы, лёгкий ветер...");
-  const [duration, setDuration] = useState<AnimeDuration>("15");
-  const [model, setModel] = useState<AnimateModel>("kling2.6");
+  const [duration, setDuration] = useState<AnimeDuration>("5");
 
-  const showWarning = parseInt(duration) > 10;
+  const cost = DURATIONS.find((d) => d.value === duration)?.cost ?? 30;
 
   const handleSubmit = () => {
     haptic("medium");
@@ -68,7 +57,7 @@ export default function AnimatePromptPage() {
     <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
         <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-          Описание видео
+          Описание движения
         </span>
         <div style={{
           padding: "6px 12px", borderRadius: 8,
@@ -87,7 +76,7 @@ export default function AnimatePromptPage() {
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Опишите, как должно выглядеть видео..."
+          placeholder="Опишите, как должно двигаться фото..."
           style={{
             width: "100%", height: "100%", resize: "none",
             fontFamily: "var(--font-body)", fontSize: isDesktop ? 14 : 13,
@@ -101,100 +90,39 @@ export default function AnimatePromptPage() {
 
   const durationSection = (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-        <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-          Длительность
-        </span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: "var(--accent)" }}>
-          {duration} сек
-        </span>
-      </div>
-      {/* Slider ticks */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
-        <div style={{
-          width: "100%", height: 6, background: "var(--border)", borderRadius: 3,
-          position: "relative", overflow: "visible",
-        }}>
-          <div style={{
-            width: `${((DURATIONS.findIndex(d => d.value === duration) + 1) / DURATIONS.length) * 100}%`,
-            height: 6, background: "var(--accent)", borderRadius: 3,
-          }} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-          {DURATIONS.map((d) => (
-            <button key={d.value} onClick={() => { haptic(); setDuration(d.value); }}
-              style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}>
-              <span style={{
-                fontFamily: "var(--font-body)", fontSize: 11,
-                fontWeight: d.value === duration ? 600 : 500,
-                color: d.value === duration ? "var(--accent)" : "var(--text-muted)",
-              }}>
-                {d.label}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const warningBanner = showWarning ? (
-    <div style={{
-      borderRadius: 14, background: "#1C1508",
-      border: "1px solid #3D2E0A", padding: "12px 14px",
-      display: "flex", flexDirection: "column", gap: 8, width: "100%",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{
-          width: 22, height: 22, borderRadius: 11,
-          background: "#3D2E0A", display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <Info size={14} color="#D49300" />
-        </div>
-        <span style={{ fontFamily: "var(--font-primary)", fontSize: 13, fontWeight: 700, color: "#D49300" }}>
-          Долгая генерация
-        </span>
-      </div>
       <span style={{
-        fontFamily: "var(--font-body)", fontSize: 11, color: "#A18A50", lineHeight: 1.5,
+        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
+        fontSize: isDesktop ? 14 : 16, fontWeight: isDesktop ? 600 : 700,
+        color: isDesktop ? "var(--text-secondary)" : "var(--text)",
       }}>
-        Видео более 10 сек генерируются дольше — ожидание может занять до 5–15 минут. Поставьте в очередь и проверьте позже.
+        Длительность
       </span>
-      <div style={{ display: "flex", gap: 6 }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "4px 10px", borderRadius: 8, background: "#2A1F06",
-        }}>
-          <div style={{ width: 6, height: 6, borderRadius: 3, background: "#D49300" }} />
-          <span style={{ fontFamily: "var(--font-body)", fontSize: 10, fontWeight: 600, color: "#D49300" }}>
-            Высокая нагрузка
-          </span>
-        </div>
-      </div>
-    </div>
-  ) : null;
-
-  const modelSectionEl = (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-        Модель
-      </span>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%" }}>
-        {MODELS.map((m) => {
-          const active = model === m.value;
+      <div style={{ display: "flex", gap: 8, width: "100%" }}>
+        {DURATIONS.map((d) => {
+          const active = duration === d.value;
           return (
-            <button key={m.value} onClick={() => { haptic(); setModel(m.value); }}
+            <button key={d.value} onClick={() => { haptic(); setDuration(d.value); }}
               style={{
-                padding: "8px 14px", borderRadius: 12,
+                flex: 1, padding: "10px 16px", borderRadius: 12,
                 background: active ? "var(--accent)" : "var(--surface)",
                 border: active ? "none" : "1px solid var(--border)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 6,
               }}>
               <span style={{
                 fontFamily: "var(--font-body)", fontSize: 13,
                 fontWeight: active ? 600 : 500,
                 color: active ? "#0A0A0A" : "var(--text-secondary)",
               }}>
-                {m.label}
+                {d.label}
+              </span>
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 12,
+                fontWeight: 500,
+                color: active ? "#0A0A0A" : "var(--text-muted)",
+                opacity: active ? 0.7 : 0.6,
+              }}>
+                {d.cost}💰
               </span>
             </button>
           );
@@ -213,7 +141,7 @@ export default function AnimatePromptPage() {
         Стоимость
       </span>
       <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 500, color: "var(--accent)" }}>
-        {COST} кредитов
+        ⚡ {cost} токенов
       </span>
     </div>
   );
@@ -225,9 +153,16 @@ export default function AnimatePromptPage() {
         width: "100%", height: 52, borderRadius: 16,
         background: "var(--accent)", border: "none", cursor: "pointer",
       }}>
-      <Video size={20} color="#0A0A0A" />
-      <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#0A0A0A" }}>
-        Оживить — {COST} кредитов
+      {isDesktop ? (
+        <Clapperboard size={18} color="#0A0A0A" />
+      ) : (
+        <Video size={20} color="#0A0A0A" />
+      )}
+      <span style={{
+        fontFamily: isDesktop ? "var(--font-body)" : "var(--font-primary)",
+        fontSize: isDesktop ? 15 : 16, fontWeight: 700, color: "#0A0A0A",
+      }}>
+        Оживить — {cost} токенов
       </span>
     </button>
   );
@@ -239,7 +174,6 @@ export default function AnimatePromptPage() {
         <div style={{ display: "flex", gap: 40, padding: "32px 40px", flex: 1 }}>
           {/* Settings column */}
           <div style={{ display: "flex", flexDirection: "column", gap: 24, width: 480 }}>
-            {/* Upload area (desktop has separate small upload + description) */}
             <div style={{
               width: "100%", height: 200, borderRadius: 20,
               background: "var(--surface)", border: "1px solid var(--border)",
@@ -258,68 +192,9 @@ export default function AnimatePromptPage() {
               )}
             </div>
             {descriptionSection}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-              <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Длительность</span>
-              <div style={{ display: "flex", gap: 8, width: "100%" }}>
-                {DURATIONS.map((d) => {
-                  const active = duration === d.value;
-                  return (
-                    <button key={d.value} onClick={() => { haptic(); setDuration(d.value); }}
-                      style={{
-                        flex: 1, padding: "10px 16px", borderRadius: 12,
-                        background: active ? "var(--accent)" : "var(--surface)",
-                        border: active ? "none" : "1px solid var(--border)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                      <span style={{
-                        fontFamily: "var(--font-body)", fontSize: 13,
-                        fontWeight: active ? 600 : 500,
-                        color: active ? "#0A0A0A" : "var(--text-secondary)",
-                      }}>{d.label === "3с" ? "3 сек" : d.label === "5с" ? "5 сек" : d.label === "10с" ? "10 сек" : "15 сек"}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-              <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Модель</span>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {MODELS.map((m) => {
-                  const active = model === m.value;
-                  return (
-                    <button key={m.value} onClick={() => { haptic(); setModel(m.value); }}
-                      style={{
-                        padding: "8px 14px", borderRadius: 12,
-                        background: active ? "var(--accent)" : "var(--surface)",
-                        border: active ? "none" : "1px solid var(--border)",
-                      }}>
-                      <span style={{
-                        fontFamily: "var(--font-body)", fontSize: 13,
-                        fontWeight: active ? 600 : 500,
-                        color: active ? "#0A0A0A" : "var(--text-secondary)",
-                      }}>{m.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "14px 16px", borderRadius: 12,
-              background: "var(--surface)", border: "1px solid var(--border)", width: "100%",
-            }}>
-              <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 500, color: "var(--text-secondary)" }}>Стоимость</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 500, color: "var(--accent)" }}>2 кредита</span>
-            </div>
-            <button onClick={handleSubmit}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                width: "100%", height: 52, borderRadius: 16,
-                background: "var(--accent)", border: "none", cursor: "pointer",
-              }}>
-              <Video size={20} color="#0A0A0A" />
-              <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "#0A0A0A" }}>Оживить — 2 кредита</span>
-            </button>
+            {durationSection}
+            {costRow}
+            {ctaButton}
           </div>
           {/* Preview column */}
           <div style={{ display: "flex", justifyContent: "center", flex: 1 }}>
@@ -340,8 +215,6 @@ export default function AnimatePromptPage() {
         {photoPreviewWithCheck(335, 180, 20)}
         {descriptionSection}
         {durationSection}
-        {warningBanner}
-        {modelSectionEl}
         {costRow}
       </div>
       <div style={{ padding: "12px 20px 24px 20px" }}>
