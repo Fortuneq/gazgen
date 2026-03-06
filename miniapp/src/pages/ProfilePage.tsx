@@ -5,7 +5,7 @@ import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic, getUser } from "../telegram";
 import { api } from "../api";
 import type { UserGeneration } from "../types";
-import { Coins, Sparkles, LogOut, X } from "lucide-react";
+import { Coins, Sparkles, LogOut, X, Shield } from "lucide-react";
 
 const MODEL_NAMES: Record<string, string> = {
   nano_banana: "Nano Banana",
@@ -27,6 +27,11 @@ export default function ProfilePage() {
   const [generations, setGenerations] = useState<UserGeneration[]>([]);
   const [loadingGens, setLoadingGens] = useState(true);
   const [selected, setSelected] = useState<UserGeneration | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    api.adminCheck().then(() => setIsAdmin(true)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     api.getProfile().then((p) => {
@@ -290,6 +295,17 @@ export default function ProfilePage() {
             </button>
           )}
 
+          {isAdmin && (
+            <button onClick={() => navigate("/admin")} style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "12px 24px", borderRadius: 12, width: "fit-content",
+              background: "#18181B", border: "1px solid #C4F82A40", cursor: "pointer",
+            }}>
+              <Shield size={16} color="#C4F82A" />
+              <span style={{ fontFamily: "var(--font-primary)", fontSize: 14, fontWeight: 600, color: "#C4F82A" }}>Админ-панель</span>
+            </button>
+          )}
+
           {/* Gallery title */}
           {generations.length > 0 && (
             <span style={{ fontFamily: "var(--font-primary)", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
@@ -352,6 +368,17 @@ export default function ProfilePage() {
           }}>
             <LogOut size={16} color="#EF4444" />
             <span style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "#EF4444" }}>Выйти</span>
+          </button>
+        )}
+
+        {isAdmin && (
+          <button onClick={() => navigate("/admin")} style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            padding: "12px 0", borderRadius: 12, width: "100%",
+            background: "#18181B", border: "1px solid #C4F82A40", cursor: "pointer",
+          }}>
+            <Shield size={16} color="#C4F82A" />
+            <span style={{ fontFamily: "var(--font-primary)", fontSize: 14, fontWeight: 600, color: "#C4F82A" }}>Админ-панель</span>
           </button>
         )}
       </div>

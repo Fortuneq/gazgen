@@ -124,3 +124,73 @@ export type AspectRatio = "1:1" | "16:9" | "9:16";
 export type AnimeDuration = "5" | "10";
 export type ViewFilter = "all" | "photo" | "video";
 export type FeedFilter = "all" | "popular" | "new";
+
+// --- Admin types ---
+
+export interface AdminPost {
+  id: number;
+  publication_id: string;
+  prompt: string | null;
+  model_name: string | null;
+  created_at: string;
+  has_result_image: boolean;
+  reference_count: number;
+}
+
+export interface PaginatedAdminPosts {
+  items: AdminPost[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AdminCategory {
+  id: number;
+  name: string;
+  emoji: string | null;
+  post_count: number;
+}
+
+export interface AdminUser {
+  id: number;
+  telegram_id: number;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  photo_credits: number;
+  video_credits: number;
+  created_at: string;
+  last_active_at: string | null;
+}
+
+export interface PaginatedAdminUsers {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface StatsOverview {
+  total_users: number;
+  total_posts: number;
+  total_generations: number;
+  total_revenue: number;
+  dau: number;
+}
+
+export interface PopularModel {
+  model: string;
+  count: number;
+}
+
+export interface DailyActive {
+  date: string;
+  users: number;
+  generations: number;
+}
+
+export interface PaymentStats {
+  date: string;
+  amount: number;
+  count: number;
+}

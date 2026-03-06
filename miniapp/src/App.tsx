@@ -1,5 +1,6 @@
 import { Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { AdminGate } from "./components/AdminGate";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
 const CreateHubPage = lazy(() => import("./pages/CreateHubPage"));
@@ -17,6 +18,11 @@ const CategoryFeedPage = lazy(() => import("./pages/CategoryFeedPage"));
 const CategoriesPage = lazy(() => import("./pages/CategoriesPage"));
 const ReelsPage = lazy(() => import("./pages/ReelsPage"));
 const ReelsTemplatePage = lazy(() => import("./pages/ReelsTemplatePage"));
+const AdminDashboardPage = lazy(() => import("./pages/admin/AdminDashboardPage"));
+const AdminPhotosPage = lazy(() => import("./pages/admin/AdminPhotosPage"));
+const AdminCategoriesPage = lazy(() => import("./pages/admin/AdminCategoriesPage"));
+const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
+const AdminStatsPage = lazy(() => import("./pages/admin/AdminStatsPage"));
 
 function LoadingFallback() {
   return (
@@ -58,6 +64,11 @@ export function App() {
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/reels" element={<ReelsPage />} />
         <Route path="/reels/:templateId" element={<ReelsTemplatePage />} />
+        <Route path="/admin" element={<AdminGate><AdminDashboardPage /></AdminGate>} />
+        <Route path="/admin/photos" element={<AdminGate><AdminPhotosPage /></AdminGate>} />
+        <Route path="/admin/categories" element={<AdminGate><AdminCategoriesPage /></AdminGate>} />
+        <Route path="/admin/users" element={<AdminGate><AdminUsersPage /></AdminGate>} />
+        <Route path="/admin/stats" element={<AdminGate><AdminStatsPage /></AdminGate>} />
       </Routes>
     </Suspense>
   );

@@ -10,6 +10,9 @@ from fastapi import Request, HTTPException
 from webapp.config import BOT_TOKEN
 from webapp.db import get_pool
 
+# Admin whitelist
+ADMIN_TELEGRAM_IDS = {421920054, ***REMOVED***}
+
 # JWT settings
 JWT_SECRET = BOT_TOKEN  # reuse bot token as secret
 JWT_ALGORITHM = "HS256"
@@ -191,3 +194,11 @@ async def get_current_user(request: Request) -> dict:
         return user
 
     raise HTTPException(status_code=401, detail="Missing authorization")
+
+
+async def get_admin_user(request: Request) -> dict:
+    """FastAPI dependency: require authenticated admin user."""
+    user = await get_current_user(request)
+    if user.get("id") not in ADMIN_TELEGRAM_IDS:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user

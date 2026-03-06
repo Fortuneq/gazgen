@@ -143,4 +143,57 @@ export const api = {
 
   // Health
   health: () => request<{ status: string }>("/health"),
+
+  // Admin
+  adminCheck: () => request<{ is_admin: boolean }>("/admin/check"),
+
+  adminGetPosts: (params?: { page?: number; limit?: number; category?: string; search?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.category) sp.set("category", params.category);
+    if (params?.search) sp.set("search", params.search);
+    const q = sp.toString();
+    return request<import("./types").PaginatedAdminPosts>(`/admin/posts${q ? "?" + q : ""}`);
+  },
+  adminDeletePost: (id: number) =>
+    request<{ ok: boolean }>(`/admin/posts/${id}`, { method: "DELETE" }),
+  adminUpdatePost: (id: number, category: string) =>
+    request<{ ok: boolean }>(`/admin/posts/${id}?category=${encodeURIComponent(category)}`, { method: "PATCH" }),
+
+  adminGetCategories: () =>
+    request<import("./types").AdminCategory[]>("/admin/categories"),
+  adminCreateCategory: (name: string, emoji: string) =>
+    request<import("./types").AdminCategory>(`/admin/categories?name=${encodeURIComponent(name)}&emoji=${encodeURIComponent(emoji)}`, { method: "POST" }),
+  adminUpdateCategory: (id: number, params: { name?: string; emoji?: string }) => {
+    const sp = new URLSearchParams();
+    if (params.name !== undefined) sp.set("name", params.name);
+    if (params.emoji !== undefined) sp.set("emoji", params.emoji);
+    return request<{ ok: boolean }>(`/admin/categories/${id}?${sp.toString()}`, { method: "PATCH" });
+  },
+  adminDeleteCategory: (id: number) =>
+    request<{ ok: boolean }>(`/admin/categories/${id}`, { method: "DELETE" }),
+
+  adminGetUsers: (params?: { page?: number; limit?: number; search?: string }) => {
+    const sp = new URLSearchParams();
+    if (params?.page) sp.set("page", String(params.page));
+    if (params?.limit) sp.set("limit", String(params.limit));
+    if (params?.search) sp.set("search", params.search);
+    const q = sp.toString();
+    return request<import("./types").PaginatedAdminUsers>(`/admin/users${q ? "?" + q : ""}`);
+  },
+  adminAdjustCredits: (telegramId: number, amount: number, reason = "admin") =>
+    request<{ ok: boolean; new_balance: number }>(`/admin/users/${telegramId}/credits`, {
+      method: "POST",
+      body: JSON.stringify({ amount, reason }),
+    }),
+
+  adminStatsOverview: () =>
+    request<import("./types").StatsOverview>("/admin/stats/overview"),
+  adminPopularModels: (days = 30) =>
+    request<import("./types").PopularModel[]>(`/admin/stats/popular-models?days=${days}`),
+  adminDailyActive: (days = 30) =>
+    request<import("./types").DailyActive[]>(`/admin/stats/daily-active?days=${days}`),
+  adminPaymentStats: (days = 30) =>
+    request<import("./types").PaymentStats[]>(`/admin/stats/payments?days=${days}`),
 };

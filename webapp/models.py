@@ -130,3 +130,78 @@ class PaginatedGenerations(BaseModel):
     page: int
     limit: int
     has_more: bool
+
+
+# --- Admin models ---
+
+class AdminPostOut(BaseModel):
+    id: int
+    publication_id: str
+    prompt: Optional[str] = None
+    model_name: Optional[str] = None
+    created_at: str
+    has_result_image: bool
+    reference_count: int
+
+
+class PaginatedAdminPosts(BaseModel):
+    items: List[AdminPostOut]
+    total: int
+    page: int
+    limit: int
+
+
+class AdminCategoryOut(BaseModel):
+    id: int
+    name: str
+    emoji: Optional[str] = None
+    post_count: int
+
+
+class AdminUserOut(BaseModel):
+    id: int
+    telegram_id: int
+    username: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    photo_credits: int
+    video_credits: int
+    created_at: str
+    last_active_at: Optional[str] = None
+
+
+class PaginatedAdminUsers(BaseModel):
+    items: List[AdminUserOut]
+    total: int
+    page: int
+    limit: int
+
+
+class CreditAdjust(BaseModel):
+    amount: int
+    reason: str = "admin"
+
+
+class StatsOverview(BaseModel):
+    total_users: int
+    total_posts: int
+    total_generations: int
+    total_revenue: float
+    dau: int
+
+
+class PopularModelOut(BaseModel):
+    model: str
+    count: int
+
+
+class DailyActiveOut(BaseModel):
+    date: str
+    users: int
+    generations: int
+
+
+class PaymentStatsOut(BaseModel):
+    date: str
+    amount: float
+    count: int
