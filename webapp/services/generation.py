@@ -11,8 +11,8 @@ IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload"
 IMGBB_EXPIRATION = 600
 
 KIE_BASE_URL = "https://api.kie.ai/api/v1/jobs"
-KIE_FILE_URL_UPLOAD = "https://api.kie.ai/api/file-url-upload"
-KIE_FILE_BASE64_UPLOAD = "https://api.kie.ai/api/file-base64-upload"
+KIE_FILE_URL_UPLOAD = "https://kieai.redpandaai.co/api/file-url-upload"
+KIE_FILE_BASE64_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload"
 
 CATEGORY_TO_MODEL = {
     "nano_banana_pro": "nano-banana-pro",
@@ -110,8 +110,14 @@ async def upload_image_to_imgbb(image_bytes: bytes) -> str | None:
         return None
 
 
+def _kie_file_url(data: dict) -> str | None:
+    """Extract best URL from KIE upload response data."""
+    d = data.get("data", {})
+    return d.get("downloadUrl") or d.get("fileUrl")
+
+
 async def upload_to_kie_base64(image_bytes: bytes, filename: str = "ref.png") -> str | None:
-    """Upload image bytes to KIE via base64, return downloadUrl."""
+    """Upload image bytes to KIE via base64."""
     try:
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
         headers = {
@@ -126,8 +132,12 @@ async def upload_to_kie_base64(image_bytes: bytes, filename: str = "ref.png") ->
         async with aiohttp.ClientSession() as session:
             async with session.post(KIE_FILE_BASE64_UPLOAD, json=payload, headers=headers) as resp:
                 data = await resp.json()
+                logger.info("KIE base64 upload response: success=%s, data_keys=%s",
+                            data.get("success"), list(data.get("data", {}).keys()))
                 if data.get("success"):
-                    return data["data"]["downloadUrl"]
+                    url = _kie_file_url(data)
+                    logger.info("KIE base64 upload URL: %s", url)
+                    return url
                 logger.error("KIE base64 upload failed: %s", data)
                 return None
     except Exception as e:
@@ -136,7 +146,7 @@ async def upload_to_kie_base64(image_bytes: bytes, filename: str = "ref.png") ->
 
 
 async def upload_to_kie_url(file_url: str) -> str | None:
-    """Re-upload an external URL to KIE storage, return downloadUrl."""
+    """Re-upload an external URL to KIE storage."""
     try:
         headers = {
             "Authorization": f"Bearer {KIE_API_KEY}",
@@ -149,8 +159,12 @@ async def upload_to_kie_url(file_url: str) -> str | None:
         async with aiohttp.ClientSession() as session:
             async with session.post(KIE_FILE_URL_UPLOAD, json=payload, headers=headers) as resp:
                 data = await resp.json()
+                logger.info("KIE URL upload response: success=%s, data_keys=%s",
+                            data.get("success"), list(data.get("data", {}).keys()))
                 if data.get("success"):
-                    return data["data"]["downloadUrl"]
+                    url = _kie_file_url(data)
+                    logger.info("KIE URL upload URL: %s", url)
+                    return url
                 logger.error("KIE URL upload failed: %s", data)
                 return None
     except Exception as e:
@@ -179,6 +193,7 @@ async def create_generation_task(
         input_data["quality"] = "basic"
 
     payload = {"model": model_id, "input": input_data}
+    logger.info("createTask payload: %s", {**payload, "input": {**input_data, "prompt": input_data["prompt"][:80] + "..."}})
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
@@ -215,6 +230,8 @@ async def create_generation_task_v2(
         input_data["image_size"] = ASPECT_TO_SIZE.get(aspect_ratio, "1024x1024")
 
     payload = {"model": model_id, "input": input_data}
+    logger.info("createTask_v2 payload: model=%s, input_urls=%s, aspect=%s",
+                model_id, input_data.get("input_urls"), aspect_ratio)
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
