@@ -39,44 +39,54 @@ CATEGORY_TO_MODEL = {
 }
 
 # Direct generation model keys → KIE model IDs + payload config
+# image_param: parameter name for reference images per model
 DIRECT_MODELS: dict[str, dict] = {
     "seedream": {
         "model_id": "seedream/4.5-text-to-image",
         "extra": {"quality": "basic"},
+        "image_param": "image_urls",
     },
     "seedream_v4": {
         "model_id": "bytedance/seedream-v4-text-to-image",
         "extra": {},
         "use_image_size": True,
+        "image_param": "image_urls",
     },
     "banana": {
         "model_id": "nano-banana-pro",
         "extra": {"resolution": "1K", "output_format": "png"},
+        "image_param": "image_input",
     },
     "nano_banana": {
         "model_id": "google/nano-banana",
         "extra": {"resolution": "1K", "output_format": "png"},
+        "image_param": "image_input",
     },
     "gpt_text": {
         "model_id": "gpt-image/1.5-text-to-image",
         "extra": {},
+        "image_param": "input_urls",
     },
     "gpt_img2img": {
         "model_id": "gpt-image/1.5-image-to-image",
         "extra": {},
+        "image_param": "input_urls",
     },
     "gpt4o": {
         "model_id": "gpt-image-1",
         "extra": {},
+        "image_param": "image_input",
     },
     "qwen": {
         "model_id": "qwen/text-to-image",
         "extra": {},
         "use_image_size": True,
+        "image_param": "image_input",
     },
     "grok": {
         "model_id": "grok-imagine/text-to-image",
         "extra": {},
+        "image_param": "image_urls",
     },
 }
 
@@ -184,7 +194,13 @@ async def create_generation_task(
         "aspect_ratio": aspect_ratio,
     }
     if reference_urls:
-        input_data["input_urls"] = reference_urls
+        # Determine correct image param based on model
+        if "nano-banana" in model_id.lower():
+            input_data["image_input"] = reference_urls
+        elif "seedream" in model_id.lower():
+            input_data["image_urls"] = reference_urls
+        else:
+            input_data["image_input"] = reference_urls
 
     if "nano-banana" in model_id.lower():
         input_data["resolution"] = "1K"
@@ -222,7 +238,8 @@ async def create_generation_task_v2(
 
     input_data: dict = {"prompt": prompt, "aspect_ratio": aspect_ratio}
     if reference_urls:
-        input_data["input_urls"] = reference_urls
+        image_param = cfg.get("image_param", "image_input")
+        input_data[image_param] = reference_urls
 
     # Apply model-specific fields
     input_data.update(cfg.get("extra", {}))
@@ -230,8 +247,8 @@ async def create_generation_task_v2(
         input_data["image_size"] = ASPECT_TO_SIZE.get(aspect_ratio, "1024x1024")
 
     payload = {"model": model_id, "input": input_data}
-    logger.info("createTask_v2 payload: model=%s, input_urls=%s, aspect=%s",
-                model_id, input_data.get("input_urls"), aspect_ratio)
+    logger.info("createTask_v2 payload: model=%s, image_param=%s, refs=%s, aspect=%s",
+                model_id, cfg.get("image_param"), reference_urls, aspect_ratio)
 
     async with aiohttp.ClientSession() as session:
         async with session.post(
