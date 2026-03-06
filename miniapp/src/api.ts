@@ -129,6 +129,10 @@ export const api = {
 
   // Profile
   getProfile: () => request<import("./types").UserProfile>("/profile"),
+  getMyGenerations: (page = 1, limit = 20) =>
+    request<import("./types").PaginatedGenerations>(`/profile/generations?page=${page}&limit=${limit}`),
+  getGenerationByTask: (taskId: string) =>
+    request<import("./types").UserGeneration>(`/profile/generations/${encodeURIComponent(taskId)}`),
 
   // Auth (Telegram Login Widget)
   authTelegram: (data: Record<string, string | number>) =>

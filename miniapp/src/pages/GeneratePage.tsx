@@ -146,7 +146,9 @@ export default function GeneratePage() {
           aspect_ratio: aspect,
           reference_urls: uploadedRefs.filter((r) => r.url && !r.uploading).map((r) => r.url),
         });
-        navigate(`/loading/${res.task_id}`);
+        navigate(`/loading/${res.task_id}`, {
+          state: { prompt: prompt.trim(), model, aspectRatio: aspect },
+        });
       } else {
         const res = await api.startGeneration({
           post_id: post?.id ?? 0,
@@ -156,7 +158,9 @@ export default function GeneratePage() {
           use_references: useRefs,
           model,
         });
-        navigate(`/loading/${res.task_id}`);
+        navigate(`/loading/${res.task_id}`, {
+          state: { prompt, model, aspectRatio: aspect },
+        });
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {

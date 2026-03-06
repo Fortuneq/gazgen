@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { api } from "../api";
@@ -9,7 +9,9 @@ import { Lightbulb } from "lucide-react";
 export default function LoadingPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const isDesktop = useIsDesktop();
+  const genState = location.state as { prompt?: string; model?: string; aspectRatio?: string } | null;
   const [progress, setProgress] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -40,7 +42,10 @@ export default function LoadingPage() {
           setProgress(100);
           if (pollRef.current) clearInterval(pollRef.current);
           if (intervalRef.current) clearInterval(intervalRef.current);
-          setTimeout(() => navigate(`/result/${taskId}`, { replace: true }), 400);
+          setTimeout(() => navigate(`/result/${taskId}`, {
+            replace: true,
+            state: genState,
+          }), 400);
         } else if (status.status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
           if (intervalRef.current) clearInterval(intervalRef.current);

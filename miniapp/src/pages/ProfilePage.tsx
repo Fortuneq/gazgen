@@ -4,18 +4,37 @@ import { Layout } from "../components/Layout";
 import { useIsDesktop } from "../hooks/useMediaQuery";
 import { haptic, getUser } from "../telegram";
 import { api } from "../api";
-import { Coins, Sparkles, LogOut } from "lucide-react";
+import type { UserGeneration } from "../types";
+import { Coins, Sparkles, LogOut, X } from "lucide-react";
+
+const MODEL_NAMES: Record<string, string> = {
+  nano_banana: "Nano Banana",
+  banana: "Nano Banana Pro",
+  seedream: "Seedream 4.5",
+  seedream_v4: "Seedream V4",
+  gpt_text: "GPT Image",
+  gpt_img2img: "GPT Img2Img",
+  gpt4o: "GPT-4o",
+  qwen: "Qwen",
+  grok: "Grok Imagine",
+};
 
 export default function ProfilePage() {
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const user = getUser();
   const [photoCredits, setPhotoCredits] = useState(0);
+  const [generations, setGenerations] = useState<UserGeneration[]>([]);
+  const [loadingGens, setLoadingGens] = useState(true);
+  const [selected, setSelected] = useState<UserGeneration | null>(null);
 
   useEffect(() => {
     api.getProfile().then((p) => {
       setPhotoCredits(p.photo_credits);
     }).catch(() => {});
+    api.getMyGenerations(1, 50).then((data) => {
+      setGenerations(data.items);
+    }).catch(() => {}).finally(() => setLoadingGens(false));
   }, []);
 
   const initials = user
@@ -64,6 +83,146 @@ export default function ProfilePage() {
       </button>
     </div>
   );
+
+  const galleryGrid = (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: isDesktop ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
+      gap: isDesktop ? 16 : 10,
+      padding: isDesktop ? "0" : "0 20px 20px",
+    }}>
+      {generations.map((gen) => (
+        <button
+          key={gen.id}
+          onClick={() => { haptic(); setSelected(gen); }}
+          style={{
+            aspectRatio: "1", borderRadius: isDesktop ? 14 : 12,
+            overflow: "hidden", border: "1px solid #27272A",
+            background: "#18181B", padding: 0, cursor: "pointer",
+            position: "relative",
+          }}
+        >
+          {gen.result_url ? (
+            <img
+              src={gen.result_url}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              loading="lazy"
+            />
+          ) : (
+            <div style={{
+              width: "100%", height: "100%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Sparkles size={24} color="#27272A" />
+            </div>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+
+  const detailModal = selected ? (
+    <div
+      onClick={() => setSelected(null)}
+      style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        background: "rgba(0,0,0,0.8)", display: "flex",
+        alignItems: "center", justifyContent: "center",
+        padding: isDesktop ? 40 : 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: isDesktop ? 520 : "100%",
+          maxHeight: "90vh", overflowY: "auto",
+          borderRadius: 20, background: "#18181B",
+          border: "1px solid #27272A",
+          display: "flex", flexDirection: "column",
+        }}
+      >
+        {/* Close */}
+        <div style={{
+          display: "flex", justifyContent: "flex-end", padding: "12px 16px 0",
+        }}>
+          <button onClick={() => setSelected(null)} style={{
+            display: "flex", padding: 4, background: "none", border: "none", cursor: "pointer",
+          }}>
+            <X size={20} color="#A1A1AA" />
+          </button>
+        </div>
+
+        {/* Image */}
+        {selected.result_url && (
+          <div style={{
+            margin: "0 16px", borderRadius: 14, overflow: "hidden",
+            border: "1px solid #27272A",
+          }}>
+            <img
+              src={selected.result_url}
+              alt=""
+              style={{ width: "100%", display: "block" }}
+            />
+          </div>
+        )}
+
+        {/* Info */}
+        <div style={{
+          padding: 16, display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#A1A1AA" }}>Модель</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#FFFFFF" }}>
+              {MODEL_NAMES[selected.model] || selected.model}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#A1A1AA" }}>Формат</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#FFFFFF" }}>
+              {selected.aspect_ratio || "1:1"}
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#A1A1AA" }}>Стоимость</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#FFFFFF" }}>
+              {selected.cost} ткн
+            </span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "#A1A1AA" }}>Дата</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#FFFFFF" }}>
+              {new Date(selected.created_at).toLocaleDateString("ru-RU")}
+            </span>
+          </div>
+          {selected.prompt && (
+            <div style={{ marginTop: 4 }}>
+              <span style={{ fontFamily: "var(--font-body)", fontSize: 12, color: "#52525B" }}>Промпт</span>
+              <p style={{
+                fontFamily: "var(--font-body)", fontSize: 13, color: "#A1A1AA",
+                lineHeight: 1.5, margin: "4px 0 0",
+              }}>
+                {selected.prompt}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const gallerySection = loadingGens ? (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "48px 0",
+    }}>
+      <div style={{
+        width: 32, height: 32, border: "3px solid #27272A",
+        borderTopColor: "#C4F82A", borderRadius: "50%",
+        animation: "spin 1s linear infinite",
+      }} />
+    </div>
+  ) : generations.length > 0 ? galleryGrid : emptyState;
 
   // DESKTOP
   if (isDesktop) {
@@ -116,8 +275,16 @@ export default function ProfilePage() {
             </button>
           )}
 
-          {emptyState}
+          {/* Gallery title */}
+          {generations.length > 0 && (
+            <span style={{ fontFamily: "var(--font-primary)", fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+              Мои работы
+            </span>
+          )}
+
+          {gallerySection}
         </div>
+        {detailModal}
       </Layout>
     );
   }
@@ -174,7 +341,20 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {emptyState}
+      {/* Gallery title */}
+      {generations.length > 0 && (
+        <div style={{ padding: "8px 20px 0" }}>
+          <span style={{ fontFamily: "var(--font-primary)", fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+            Мои работы
+          </span>
+        </div>
+      )}
+
+      <div style={{ padding: "12px 0" }}>
+        {gallerySection}
+      </div>
+
+      {detailModal}
     </Layout>
   );
 }

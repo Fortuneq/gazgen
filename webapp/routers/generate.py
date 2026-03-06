@@ -112,6 +112,13 @@ async def start_generation(req: GenerateRequest, user: dict = Depends(get_curren
 
     await _check_and_deduct(pool, telegram_id, model_key, task_id)
 
+    cost = await _get_model_cost(pool, model_key)
+    await pool.execute(
+        "INSERT INTO user_generations (telegram_id, task_id, prompt, model, aspect_ratio, cost, status) "
+        "VALUES ($1, $2, $3, $4, $5, $6, 'pending') ON CONFLICT (task_id) DO NOTHING",
+        telegram_id, task_id, prompt, model_key, req.aspect_ratio, cost,
+    )
+
     return GenerateResponse(task_id=task_id)
 
 
@@ -142,6 +149,13 @@ async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depen
 
     await _check_and_deduct(pool, telegram_id, req.model, task_id)
 
+    cost = await _get_model_cost(pool, req.model)
+    await pool.execute(
+        "INSERT INTO user_generations (telegram_id, task_id, prompt, model, aspect_ratio, cost, status) "
+        "VALUES ($1, $2, $3, $4, $5, $6, 'pending') ON CONFLICT (task_id) DO NOTHING",
+        telegram_id, task_id, req.prompt.strip(), req.model, req.aspect_ratio, cost,
+    )
+
     return GenerateResponse(task_id=task_id)
 
 
@@ -160,10 +174,27 @@ async def upload_reference(file: UploadFile = File(...), user: dict = Depends(ge
 
 @router.get("/generate/{task_id}/status", response_model=GenerateStatusOut)
 async def generation_status(task_id: str):
+    pool = get_pool()
     try:
         result = await poll_task_status(task_id)
     except RuntimeError as e:
+        await pool.execute(
+            "UPDATE user_generations SET status = 'failed' WHERE task_id = $1 AND status != 'failed'",
+            task_id,
+        )
         return GenerateStatusOut(task_id=task_id, status="failed", error=str(e))
+
+    if result["status"] in ("success", "completed"):
+        await pool.execute(
+            "UPDATE user_generations SET status = 'success', result_url = $1 "
+            "WHERE task_id = $2 AND status != 'success'",
+            result.get("result_url"), task_id,
+        )
+    elif result["status"] == "failed":
+        await pool.execute(
+            "UPDATE user_generations SET status = 'failed' WHERE task_id = $1 AND status != 'failed'",
+            task_id,
+        )
 
     return GenerateStatusOut(
         task_id=task_id,

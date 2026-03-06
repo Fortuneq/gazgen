@@ -99,6 +99,25 @@ export interface PaymentStatus {
   paid_at?: string;
 }
 
+export interface UserGeneration {
+  id: number;
+  task_id: string;
+  prompt: string | null;
+  model: string;
+  aspect_ratio: string | null;
+  result_url: string | null;
+  cost: number;
+  created_at: string;
+}
+
+export interface PaginatedGenerations {
+  items: UserGeneration[];
+  total: number;
+  page: number;
+  limit: number;
+  has_more: boolean;
+}
+
 export type PromptMode = "original" | "custom";
 export type AspectRatio = "1:1" | "16:9" | "9:16";
 export type AnimeDuration = "3" | "5" | "10" | "15";

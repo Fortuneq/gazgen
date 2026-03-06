@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 class CategoryOut(BaseModel):
@@ -110,3 +110,22 @@ class PaymentStatusOut(BaseModel):
     tokens: int
     created_at: str
     paid_at: Optional[str] = None
+
+
+class UserGenerationOut(BaseModel):
+    id: int
+    task_id: str
+    prompt: Optional[str] = None
+    model: str
+    aspect_ratio: Optional[str] = None
+    result_url: Optional[str] = None
+    cost: int
+    created_at: str
+
+
+class PaginatedGenerations(BaseModel):
+    items: List[UserGenerationOut]
+    total: int
+    page: int
+    limit: int
+    has_more: bool
