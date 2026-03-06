@@ -3,6 +3,7 @@ Animate photo flow — Photix Bot
 Flow: Demo GIF intro → Upload photo → Motion prompt (or Auto) → Duration → Confirm → Generate
 Note: Animation API not yet connected — shows placeholder
 """
+import os
 import logging
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, FSInputFile
@@ -16,6 +17,8 @@ from bot.utils import safe_edit_text, safe_delete, insufficient_tokens_text
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+DEMO_GIF_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "animate_demo.mp4")
 
 
 class AnimateState(StatesGroup):
