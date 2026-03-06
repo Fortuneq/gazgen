@@ -11,9 +11,8 @@ from webapp.models import (
 )
 from webapp.services.generation import (
     get_model_id,
-    upload_image_to_imgbb,
-    upload_to_kie_base64,
-    upload_to_kie_url,
+    upload_to_kie,
+    upload_to_kie_from_url,
     create_generation_task,
     create_generation_task_v2,
     poll_task_status,
@@ -100,7 +99,7 @@ async def start_generation(req: GenerateRequest, user: dict = Depends(get_curren
             req.post_id,
         )
         for i, ref_row in enumerate(ref_rows):
-            url = await upload_to_kie_base64(bytes(ref_row["image_data"]), f"ref_{req.post_id}_{i}.png")
+            url = await upload_to_kie(bytes(ref_row["image_data"]), f"ref_{req.post_id}_{i}.png")
             if url:
                 reference_urls.append(url)
 
@@ -143,7 +142,7 @@ async def start_direct_generation(req: DirectGenerateRequest, user: dict = Depen
     # Re-upload user reference URLs to KIE storage
     kie_ref_urls: list[str] = []
     for ref_url in req.reference_urls:
-        kie_url = await upload_to_kie_url(ref_url)
+        kie_url = await upload_to_kie_from_url(ref_url)
         if kie_url:
             kie_ref_urls.append(kie_url)
 
@@ -176,7 +175,7 @@ async def upload_reference(file: UploadFile = File(...), user: dict = Depends(ge
     if len(contents) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-    url = await upload_to_kie_base64(contents, file.filename or "reference.png")
+    url = await upload_to_kie(contents, file.filename or "reference.png")
     if not url:
         raise HTTPException(status_code=500, detail="Failed to upload image")
 

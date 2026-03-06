@@ -11,8 +11,7 @@ IMGBB_UPLOAD_URL = "https://api.imgbb.com/1/upload"
 IMGBB_EXPIRATION = 600
 
 KIE_BASE_URL = "https://api.kie.ai/api/v1/jobs"
-KIE_FILE_URL_UPLOAD = "https://kieai.redpandaai.co/api/file-url-upload"
-KIE_FILE_BASE64_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload"
+KIE_UPLOAD_URL = "https://upload.aiquickdraw.com/upload"
 
 CATEGORY_TO_MODEL = {
     "nano_banana_pro": "nano-banana-pro",
@@ -120,65 +119,53 @@ async def upload_image_to_imgbb(image_bytes: bytes) -> str | None:
         return None
 
 
-def _kie_file_url(data: dict) -> str | None:
-    """Extract best URL from KIE upload response data."""
-    d = data.get("data", {})
-    return d.get("downloadUrl") or d.get("fileUrl")
-
-
-async def upload_to_kie_base64(image_bytes: bytes, filename: str = "ref.png") -> str | None:
-    """Upload image bytes to KIE via base64."""
+async def upload_to_kie(image_bytes: bytes, filename: str = "ref.png") -> str | None:
+    """Upload image bytes to KIE via upload.aiquickdraw.com multipart form."""
     try:
-        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
         headers = {
             "Authorization": f"Bearer {KIE_API_KEY}",
-            "Content-Type": "application/json",
         }
-        payload = {
-            "base64Data": image_base64,
-            "uploadPath": "references",
-            "fileName": filename,
-        }
+        form = aiohttp.FormData()
+        form.add_field("file", image_bytes, filename=filename, content_type="image/png")
+        form.add_field("path", "kieai/market")
+
         async with aiohttp.ClientSession() as session:
-            async with session.post(KIE_FILE_BASE64_UPLOAD, json=payload, headers=headers) as resp:
+            async with session.post(KIE_UPLOAD_URL, data=form, headers=headers) as resp:
                 data = await resp.json()
-                logger.info("KIE base64 upload response: success=%s, data_keys=%s",
-                            data.get("success"), list(data.get("data", {}).keys()))
-                if data.get("success"):
-                    url = _kie_file_url(data)
-                    logger.info("KIE base64 upload URL: %s", url)
+                logger.info("KIE upload response: %s", data)
+                # Response contains the file URL directly
+                url = data.get("url") or data.get("fileUrl") or data.get("downloadUrl")
+                if url:
+                    logger.info("KIE upload success: %s", url)
                     return url
-                logger.error("KIE base64 upload failed: %s", data)
+                # Some responses wrap in data object
+                if data.get("data"):
+                    url = data["data"].get("url") or data["data"].get("fileUrl") or data["data"].get("downloadUrl")
+                    if url:
+                        logger.info("KIE upload success (nested): %s", url)
+                        return url
+                logger.error("KIE upload failed or no URL in response: %s", data)
                 return None
     except Exception as e:
-        logger.error("Error uploading to KIE (base64): %s", e)
+        logger.error("Error uploading to KIE: %s", e)
         return None
 
 
-async def upload_to_kie_url(file_url: str) -> str | None:
-    """Re-upload an external URL to KIE storage."""
+async def upload_to_kie_from_url(file_url: str) -> str | None:
+    """Download image from URL and re-upload to KIE."""
     try:
-        headers = {
-            "Authorization": f"Bearer {KIE_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "fileUrl": file_url,
-            "uploadPath": "references",
-        }
         async with aiohttp.ClientSession() as session:
-            async with session.post(KIE_FILE_URL_UPLOAD, json=payload, headers=headers) as resp:
-                data = await resp.json()
-                logger.info("KIE URL upload response: success=%s, data_keys=%s",
-                            data.get("success"), list(data.get("data", {}).keys()))
-                if data.get("success"):
-                    url = _kie_file_url(data)
-                    logger.info("KIE URL upload URL: %s", url)
-                    return url
-                logger.error("KIE URL upload failed: %s", data)
-                return None
+            async with session.get(file_url) as resp:
+                if resp.status != 200:
+                    logger.error("Failed to download %s: status %d", file_url, resp.status)
+                    return None
+                image_bytes = await resp.read()
+
+        # Extract filename from URL
+        filename = file_url.rsplit("/", 1)[-1].split("?")[0] or "ref.jpg"
+        return await upload_to_kie(image_bytes, filename)
     except Exception as e:
-        logger.error("Error uploading to KIE (url): %s", e)
+        logger.error("Error re-uploading from URL to KIE: %s", e)
         return None
 
 
