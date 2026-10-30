@@ -1,96 +1,43 @@
-# Higgsfield Community Parser
+# GasGen (Photix)
 
-Парсер для извлечения данных с сайта https://higgsfield.ai/community/
+An AI image and video generation platform delivered through Telegram: a bot, a Telegram Mini App and a web API. Users browse a library of ready-made prompts parsed from the Higgsfield community, find similar ones with semantic search, and generate their own images and videos.
 
-## Что извлекается
+## Features
 
-Для каждого поста на странице:
-- Основное изображение (job media)
-- Промпт (JSON с подробным описанием)
-- Референсное изображение (attribute-image)
+- **Prompt library** — posts with prompts, results and reference images parsed from the Higgsfield community
+- **Semantic search** — prompt embeddings (`all-MiniLM-L6-v2`, 384-dim) stored in PostgreSQL with pgvector
+- **Generation flows in the bot** — photo generation, custom prompts, "generate like this", video, photo animation and face swap (generation via the Kie.ai API)
+- **Mini App** — React + TypeScript Telegram WebApp for browsing categories and generating
+- **Purchases and profile** — paid generations and a user profile in the bot
+- **Admin and analytics** — admin endpoints and a separate analytics schema
 
-## Установка
+## Architecture
+
+```
+bot/          — aiogram 3 Telegram bot (handlers for each generation flow)
+webapp/       — FastAPI backend for the Mini App: auth, categories, images, generation, admin
+miniapp/      — React + TypeScript Telegram Mini App
+higgsfield_parser_v3.py, indexer.py  — Playwright parser and embedding indexer
+migrations/, db_schema.sql           — PostgreSQL schema
+nginx/, docker-compose*.yml          — deployment
+```
+
+## Tech stack
+
+Python, aiogram 3, FastAPI, PostgreSQL + pgvector, sentence-transformers, Playwright, OpenAI API, Kie.ai API, React, TypeScript, Docker, nginx, Prometheus, Grafana.
+
+## Getting started
 
 ```bash
-# Активировать виртуальное окружение
-source .venv/bin/activate
-
-# Установить зависимости (уже установлено)
-pip install -r requirements.txt
-
-# Установить браузеры Playwright (уже установлено)
-playwright install chromium
+cp .env.example .env              # BOT_TOKEN, OPENAI_API_KEY, KIE_API_KEY, DB_* settings
+docker compose up -d              # PostgreSQL, bot, pgAdmin, Prometheus, Grafana
 ```
 
-## Использование
-
-### Тестовый запуск (2 элемента)
+Bot only, or the Mini App with its web API:
 
 ```bash
-python test_parser.py
+docker compose -f docker-compose-bot-only.yml up -d
+docker compose -f docker-compose-miniapp.yml up -d
 ```
 
-### Полный парсинг всех элементов
-
-```bash
-python higgsfield_parser.py
-```
-
-### Параметры в скрипте
-
-В файле `higgsfield_parser.py` (строки 129-130) можно настроить:
-
-- `HEADLESS = False` - браузер будет видимым (рекомендуется, так как вы авторизованы)
-- `MAX_ITEMS = None` - парсить все элементы (или укажите число, например `10` для теста)
-
-**Важно:** Парсер работает с вашего аккаунта, поэтому браузер должен быть в видимом режиме (HEADLESS=False)
-
-## Результаты
-
-После запуска создастся папка `higgsfield_data/` со структурой:
-
-```
-higgsfield_data/
-├── results.json          # JSON со всеми данными
-├── images/              # Основные изображения
-│   ├── image_0000.webp
-│   ├── image_0001.webp
-│   └── ...
-└── references/          # Референсные изображения
-    ├── reference_0000.webp
-    ├── reference_0001.webp
-    └── ...
-```
-
-### Формат results.json
-
-```json
-[
-  {
-    "id": 0,
-    "main_image_url": "https://...",
-    "main_image_path": "higgsfield_data/images/image_0000.webp",
-    "prompt": "{...}",
-    "reference_image_url": "https://...",
-    "reference_image_path": "higgsfield_data/references/reference_0000.webp"
-  }
-]
-```
-
-## Примечания
-
-- Парсер работает с вашим аккаунтом (браузер в видимом режиме)
-- Автоматически закрывает cookie consent dialog
-- Скроллит страницу для загрузки всех элементов
-- Автоматически скачивает изображения в высоком качестве
-- Обрабатывает ошибки и продолжает работу
-- Промпты извлекаются в формате JSON из alt-атрибутов или figcaption элементов
-- Референсные изображения извлекаются из модальных окон
-
-## Файлы проекта
-
-- `higgsfield_parser.py` - основной парсер
-- `test_parser.py` - тестовый скрипт (2 элемента)
-- `save_page_html.py` - вспомогательный скрипт для отладки
-- `requirements.txt` - зависимости проекта
-# gazgen
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) and [`DOCKER_DEPLOYMENT.md`](DOCKER_DEPLOYMENT.md) for production setup with SSL.
