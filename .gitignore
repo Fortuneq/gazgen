@@ -36,3 +36,5 @@ chroma_db/
 
 # Docker volumes
 bot_data/
+
+node_modules/
